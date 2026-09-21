@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+dist/
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Env & secrets
+.env
+.env.*
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local planning notes (not for the public repo)
+ideation/
+
+# Build artifacts
+*.AppImage
+*.deb
+*.rpm
+result/
