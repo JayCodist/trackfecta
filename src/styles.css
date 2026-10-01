@@ -159,3 +159,29 @@ body {
   font-size: 15px;
   font-weight: 600;
 }
+
+.desc-input {
+  width: 100%;
+  text-align: center;
+  font-size: 15px;
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--surface);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+  max-width: min(420px, 90vw);
+}

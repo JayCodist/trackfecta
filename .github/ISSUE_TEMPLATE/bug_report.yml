@@ -1,0 +1,104 @@
+name: Bug report
+description: Something is not working as expected
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report!
+        For **security issues**, use the private form instead:
+        https://github.com/JayCodist/ToggLinux/security/advisories/new
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+      placeholder: The tray icon disappears after unlocking the session...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the problem?
+      value: |
+        1. Go to '...'
+        2. Click on '....'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: ToggLinux version
+      description: Shown in the About dialog / release tag (e.g. 1.0.0)
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Installation method
+      options:
+        - .deb
+        - .rpm
+        - AppImage
+        - Built from source
+        - Other / unknown
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution
+      description: e.g. Ubuntu 24.04, Fedora 42, Debian 13
+    validations:
+      required: true
+  - type: dropdown
+    id: desktop
+    attributes:
+      label: Desktop environment
+      options:
+        - GNOME
+        - KDE Plasma
+        - Xfce
+        - Cinnamon
+        - MATE
+        - Hyprland / other Wayland compositor
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: session
+    attributes:
+      label: Session type
+      options:
+        - Wayland
+        - X11
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Any output from the terminal, `journalctl --user -b`, or
+        `~/.local/share/com.togglinux.app/` if present.
+        **Please redact your Toggl API token before pasting.**
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this hasn't been reported yet
+          required: true
+        - label: I redacted any API tokens or personal data from logs
+          required: true

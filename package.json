@@ -1,9 +1,14 @@
 {
   "name": "togglinux",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
+  "license": "MIT",
   "description": "Unofficial Toggl Track desktop client for Linux",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JayCodist/ToggLinux.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

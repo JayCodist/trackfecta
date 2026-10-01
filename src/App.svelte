@@ -5,27 +5,38 @@
   import Timer from "./lib/Timer.svelte";
   import { EMPTY, type TimerState } from "./lib/timer";
 
-  let hasToken = $state<boolean | null>(null);
+  // Fetch the current snapshot on mount, then keep it in sync via the Rust-side
+  // `timer-state` broadcast (handles the startup race where the first broadcast
+  // fires before this listener attaches).
   let timer: TimerState = $state(EMPTY);
+  let toast = $state<string | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
-    invoke<boolean>("has_api_token")
-      .then((v) => (hasToken = v))
-      .catch(() => (hasToken = false));
+    invoke<TimerState>("get_state")
+      .then((s) => (timer = s))
+      .catch(() => {});
 
-    const un = listen<TimerState>("timer-state", (e) => (timer = e.payload));
-    return () => un.then((f) => f());
+    const unState = listen<TimerState>("timer-state", (e) => (timer = e.payload));
+    const unToast = listen<string>("toast", (e) => {
+      toast = e.payload;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => (toast = null), 6000);
+    });
+    return () => {
+      unState.then((f) => f());
+      unToast.then((f) => f());
+      clearTimeout(toastTimer);
+    };
   });
 </script>
 
-{#if hasToken === null}
-  <main class="shell">
-    <section class="card">
-      <p class="muted">Loading…</p>
-    </section>
-  </main>
-{:else if !hasToken}
-  <Auth onconnected={() => (hasToken = true)} />
+{#if timer.status === "disconnected"}
+  <Auth />
 {:else}
   <Timer {timer} />
+{/if}
+
+{#if toast}
+  <div class="toast" role="alert">{toast}</div>
 {/if}

@@ -1,0 +1,4 @@
+# Default reviewers for the whole repository.
+# Lines later in this file take precedence.
+
+*       @JayCodist
