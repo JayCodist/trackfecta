@@ -5,7 +5,7 @@ An **unofficial** desktop client for [Toggl Track](https://toggl.com/track/) on 
 > ⚠️ ToggLinux is not affiliated with, endorsed by, or sponsored by Toggl™. Toggl™ is a trademark of Toggl OÜ.
 > ⚠️ Working name — will be renamed before any public release.
 
-Built with **Tauri v2** (Rust + WebKitGTK) and **React + Tailwind**: a fast, browser-aesthetic timer app that lives in your tray, keeps running in the background, detects idle time (even on GNOME Wayland), and talks directly to the Toggl Track API.
+Built with **Tauri v2** (Rust + WebKitGTK) and **Svelte + Tailwind**: a fast, browser-aesthetic timer app that lives in your tray, keeps running in the background, detects idle time (even on GNOME Wayland), and talks directly to the Toggl Track API.
 
 ## Features (planned)
 
@@ -22,8 +22,8 @@ Built with **Tauri v2** (Rust + WebKitGTK) and **React + Tailwind**: a fast, bro
 Prerequisites (Ubuntu 24.04+):
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-  librsvg2-dev patchelf xdg-utils build-essential curl
+sudo apt install pkg-config build-essential libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+  librsvg2-dev patchelf xdg-utils curl
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # if no cargo
 ```
 

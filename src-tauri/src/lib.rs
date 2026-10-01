@@ -2,8 +2,9 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{
-    menu::{Menu, MenuItem},
-    Manager, Runtime, WebviewWindow, Wry,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::TrayIconBuilder,
+    Emitter, Manager, Runtime, WebviewWindow, Wry,
 };
 
 const KEYRING_SERVICE: &str = "com.togglinux.app";
@@ -116,7 +117,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            // launch args written into the autostart .desktop entry -> start minimized
+            Some(vec!["--hidden"]),
         ))
         .manage(AppState {
             timer: Mutex::new(TimerState {
@@ -132,12 +134,12 @@ pub fn run() {
             let show = MenuItem::with_id(app, "show", "Show ToggLinux", true, None::<&str>)?;
             let resume = MenuItem::with_id(app, "resume", "Resume last entry", true, None::<&str>)?;
             let stop = MenuItem::with_id(app, "stop", "Stop timer", false, None::<&str>)?;
-            let sep1 = tauri::menu::Separator::new(app)?;
-            let sep2 = tauri::menu::Separator::new(app)?;
+            let sep1 = PredefinedMenuItem::separator(app)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&status, &sep1, &show, &resume, &stop, &sep2, &quit])?;
 
-            let _tray = tauri::TrayIconBuilder::with_id("main-tray")
+            let _tray = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .tooltip("ToggLinux — unofficial Toggl Track client")

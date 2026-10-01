@@ -44,10 +44,5 @@
     "shortDescription": "Unofficial Toggl Track desktop client",
     "longDescription": "ToggLinux is an unofficial, tray-first desktop client for Toggl Track on Linux. Not affiliated with Toggl.",
     "category": "Productivity"
-  },
-  "plugins": {
-    "autostart": {
-      "args": ["--hidden"]
-    }
   }
 }
