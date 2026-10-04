@@ -882,9 +882,6 @@ pub fn run() {
             }
 
             // ---- Startup: restore the session if a token is in the keyring ----
-            // First move a token saved under the pre-rename service, so an
-            // existing install keeps its session. No-op on a fresh install.
-            secrets::migrate_from_old_service();
             // A temporary failure, such as being offline at startup, leaves the
             // status as verifying. The sync loop retries connect with the
             // cached token by itself. While a quota block is active, skip the
