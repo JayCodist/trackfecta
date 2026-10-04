@@ -3,16 +3,22 @@
   import { listen } from "@tauri-apps/api/event";
   import Auth from "./lib/Auth.svelte";
   import Timer from "./lib/Timer.svelte";
-  import { EMPTY, type TimerState } from "./lib/timer";
+  import { applyTheme, EMPTY, type TimerState } from "./lib/timer";
 
-  // Fetch the current snapshot on mount, then keep it in sync via the Rust-side
-  // `timer-state` broadcast (handles the startup race where the first broadcast
-  // fires before this listener attaches).
+  // Get the current snapshot on mount. Then keep it in sync through the
+  // timer-state broadcast from the Rust side. This covers the startup race
+  // where the first broadcast happens before the listener is attached.
   let timer: TimerState = $state(EMPTY);
   let toast = $state<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
+    // Apply the saved appearance choice before the first paint of content.
+    // "system" means no attribute, so CSS follows prefers-color-scheme.
+    invoke<{ theme: string }>("get_settings")
+      .then((s) => applyTheme(s.theme))
+      .catch(() => {});
+
     invoke<TimerState>("get_state")
       .then((s) => (timer = s))
       .catch(() => {});

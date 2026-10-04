@@ -10,12 +10,10 @@
     "url": "git+https://github.com/JayCodist/ToggLinux.git"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "tauri dev",
+    "vite": "vite",
     "build": "tsc && vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "icons": "tauri icon"
   },

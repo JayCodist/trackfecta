@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "com.togglinux.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run vite",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"

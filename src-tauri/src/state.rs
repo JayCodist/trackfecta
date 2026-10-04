@@ -1,5 +1,6 @@
-//! Shared application state: timer snapshot, Toggl session, tray handles,
-//! and the broadcast helper that pushes state to the webview + tray.
+//! Shared application state: the timer snapshot, the Toggl session, the tray
+//! handles, and the broadcast helper. The broadcast helper sends the state to
+//! the webview and updates the tray.
 
 use std::sync::{Arc, Mutex};
 
@@ -8,30 +9,40 @@ use tauri::menu::MenuItem;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tokio::sync::Notify;
 
+use crate::budget::Budget;
+use crate::store::{EntryRow, Store};
 use crate::toggl::{TogglClient, UserInfo};
 
 #[derive(Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ConnStatus {
-    /// Token found in keyring, validating against the API.
+    /// A token is in the keyring. The app is checking it against the API.
     Verifying,
-    /// No token / token rejected / expired.
+    /// No token, or the token was rejected or expired.
     Disconnected,
     /// Authenticated with Toggl.
     Connected,
 }
 
-/// Snapshot pushed to the UI on every change (`timer-state` event).
+/// The state snapshot the app sends to the UI on every change. The event
+/// name is timer-state.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TimerState {
     pub running: bool,
     pub description: Option<String>,
-    /// Unix seconds (as string — the UI does its own ticking).
+    /// Unix seconds, as a string. The UI counts the elapsed time itself.
     pub started_at: Option<String>,
-    /// Seconds tracked today, EXCLUDING the running entry (UI adds elapsed).
+    /// Seconds tracked today, not including the running entry. The UI adds
+    /// the elapsed time of the running entry.
     pub today_seconds: i64,
     pub status: ConnStatus,
+    /// Recent entries from the local cache, newest first. Reading the cache
+    /// uses no API requests.
+    pub entries: Vec<EntryRow>,
+    /// Requests left in the current rolling hour. The free plan allows about
+    /// 30 per hour.
+    pub requests_left: usize,
 }
 
 impl Default for TimerState {
@@ -42,6 +53,8 @@ impl Default for TimerState {
             started_at: None,
             today_seconds: 0,
             status: ConnStatus::Verifying,
+            entries: Vec::new(),
+            requests_left: 0,
         }
     }
 }
@@ -51,29 +64,56 @@ pub struct Session {
     pub user: UserInfo,
 }
 
+/// The data of the most recent entry. The "Resume" item in the tray menu
+/// reuses it.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastEntry {
+    pub description: Option<String>,
+    pub project_id: Option<i64>,
+    pub tags: Vec<String>,
+    pub billable: bool,
+}
+
 pub struct AppState {
     pub timer: Mutex<TimerState>,
     pub session: Mutex<Option<Session>>,
-    /// Cached API token (mirror of the keyring) so the poll loop can retry a
-    /// connection after a transient network failure without re-prompting.
+    /// The API token, cached in memory as a copy of the keyring value. The
+    /// poll loop uses it to retry a connection after a temporary network
+    /// failure. The user does not have to enter it again.
     pub token: Mutex<Option<String>>,
-    /// Server id of the running entry (None when stopped/not connected).
+    /// The server id of the running entry. None when stopped or not
+    /// connected.
     pub entry_id: Mutex<Option<i64>>,
-    /// Description of the most recent entry — powers tray "Resume".
-    pub last_description: Mutex<Option<String>>,
-    /// Wakes the sync loop early (focus, start/stop, re-auth).
+    /// The data of the most recent entry. The "Resume" item in the tray menu
+    /// reuses it.
+    pub last_entry: Mutex<Option<LastEntry>>,
+    /// Wakes the sync loop early: on window focus, start/stop, or re-auth.
     pub wakeup: Arc<Notify>,
+    /// The SQLite cache. None if the cache failed to open. Then the UI runs
+    /// on live data only.
+    pub store: Option<Arc<Store>>,
+    /// The rolling 1-hour API request budget. The free plan allows about 30
+    /// requests per hour.
+    pub budget: Arc<Budget>,
+    /// True while a connect is in progress. The poll loop must not start a
+    /// second one. Without this guard, a focus wakeup during the startup
+    /// connect made every connect-time request fire twice.
+    pub connecting: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(store: Option<Arc<Store>>) -> Self {
         Self {
             timer: Mutex::new(TimerState::default()),
             session: Mutex::new(None),
             token: Mutex::new(None),
             entry_id: Mutex::new(None),
-            last_description: Mutex::new(None),
+            last_entry: Mutex::new(None),
             wakeup: Arc::new(Notify::new()),
+            store,
+            budget: Arc::new(Budget::new()),
+            connecting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 }
@@ -88,15 +128,77 @@ pub struct TrayItems {
     pub quit: MenuItem<Wry>,
 }
 
-/// Emit the current timer snapshot to the UI and refresh the tray text.
+/// Sends the current timer snapshot to the UI and updates the tray text.
 pub fn broadcast(app: &AppHandle) {
     let snapshot = {
         let st = app.state::<AppState>();
-        let snapshot = st.timer.lock().unwrap().clone();
-        snapshot
+        {
+            let mut t = st.timer.lock().unwrap();
+            // The entries and the today total come from the cache. This is
+            // instant and uses no API requests. (sync::refresh sets a
+            // fallback total from live data when there is no cache.)
+            // Do the recompute on the stored state. The tray ticker reads
+            // today_seconds from it. An update of the snapshot only left the
+            // panel icon showing just the running elapsed time.
+            if let Some(store) = st.store.as_ref() {
+                t.entries = store.entries_since(start_of_window(window_days(st.store.as_ref())));
+                let today = start_of_today();
+                t.today_seconds = t
+                    .entries
+                    .iter()
+                    .filter(|r| r.stop.is_some() && r.start >= today)
+                    .map(|r| r.duration.max(0.0) as i64)
+                    .sum();
+            }
+            t.requests_left = st.budget.remaining();
+            t.clone()
+        }
     };
     let _ = app.emit("timer-state", &snapshot);
     update_tray(app, &snapshot);
+    // The panel icon shows the live day total (see tray.rs). Draw it again on
+    // every state change. Start, stop, and edits show up at once.
+    crate::tray::refresh(app);
+}
+
+/// Local midnight today, as Unix seconds. Toggl counts "today" as the
+/// user's own day.
+pub fn start_of_today() -> i64 {
+    let now = chrono::Local::now();
+    let midnight = now.date_naive().and_time(chrono::NaiveTime::MIN);
+    midnight
+        .and_local_timezone(chrono::Local)
+        .single()
+        .or_else(|| midnight.and_local_timezone(chrono::Local).latest())
+        .map(|t| t.timestamp())
+        .unwrap_or_else(|| now.timestamp())
+}
+
+/// Default history window for the list view, in days (one month).
+pub const DEFAULT_WINDOW_DAYS: i64 = 31;
+
+/// The list window in days. This is the window_days setting, which the
+/// "Load earlier entries" button grows. The value is limited to a sane
+/// range.
+pub fn window_days(store: Option<&Arc<Store>>) -> i64 {
+    store
+        .and_then(|s| s.get_setting("window_days"))
+        .and_then(|v| v.parse().ok())
+        .filter(|d: &i64| (7..=366).contains(d))
+        .unwrap_or(DEFAULT_WINDOW_DAYS)
+}
+
+/// Start of the entry-list window: local midnight, `days - 1` back.
+pub fn start_of_window(days: i64) -> i64 {
+    let now = chrono::Local::now();
+    let day = now.date_naive() - chrono::Duration::days(days - 1);
+    let midnight = day.and_time(chrono::NaiveTime::MIN);
+    midnight
+        .and_local_timezone(chrono::Local)
+        .single()
+        .or_else(|| midnight.and_local_timezone(chrono::Local).latest())
+        .map(|t| t.timestamp())
+        .unwrap_or_else(|| now.timestamp() - (days - 1) * 86_400)
 }
 
 fn update_tray(app: &AppHandle, t: &TimerState) {
@@ -105,7 +207,7 @@ fn update_tray(app: &AppHandle, t: &TimerState) {
     };
     let label = if t.running {
         format!(
-            "■ Stop — {}",
+            "■ Stop: {}",
             t.description.clone().unwrap_or_else(|| "Untitled".into())
         )
     } else {
@@ -120,17 +222,19 @@ fn update_tray(app: &AppHandle, t: &TimerState) {
 
     let last = app
         .state::<AppState>()
-        .last_description
+        .last_entry
         .lock()
         .unwrap()
         .clone();
     let _ = items.resume.set_enabled(!t.running && last.is_some());
-    if let Some(desc) = last {
-        let _ = items.resume.set_text(format!("Resume: {desc}"));
+    if let Some(last) = last {
+        let label = last.description.unwrap_or_else(|| "Untitled".into());
+        let _ = items.resume.set_text(format!("Resume: {label}"));
     }
 }
 
-/// Drop the session (bad/expired token) and tell the UI to show Auth.
+/// Drops the session after a bad or expired token, and tells the UI to show
+/// the Auth screen.
 pub fn mark_disconnected(app: &AppHandle) {
     {
         let st = app.state::<AppState>();
@@ -145,7 +249,7 @@ pub fn mark_disconnected(app: &AppHandle) {
     broadcast(app);
 }
 
-/// Non-fatal error banner in the UI.
+/// Shows a non-fatal error banner in the UI.
 pub fn emit_toast(app: &AppHandle, message: &str) {
     let _ = app.emit("toast", message.to_string());
 }

@@ -17,12 +17,12 @@ First public release.
 - Resume-last-entry from the tray menu, prefilled with the last description.
 - Live tray status: the running entry while it ticks, today's total when idle.
 - Background sync loop (10 s while running, 30 s idle, instant refresh on
-  window focus) with rate-limit backoff honouring `429 + Retry-After`.
+  window focus) with rate-limit backoff that honors `429 + Retry-After`.
 - API-token authentication validated against `GET /me`, stored in the OS
   keyring (no token on disk), with session restore on launch and graceful
   logout when a token is rejected.
-- Daemon-like behaviour: close-to-tray, single instance, autostart.
-- Light / dark / system theme via `prefers-color-scheme`.
+- Daemon-like behavior: close-to-tray, single instance, autostart.
+- Light, dark, and system themes via `prefers-color-scheme`.
 - Release workflow builds `.deb`, `.rpm` and AppImage bundles for GitHub
   Releases (first published release coming soon).
 

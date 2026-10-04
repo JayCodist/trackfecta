@@ -1,97 +1,105 @@
-<div align="center">
-
 # ToggLinux
-
-**An unofficial tray-first Toggl Track desktop client for Linux.**
-
-Fast, low-memory time tracking that lives in your system tray —
-built with **Tauri v2** (Rust) and **Svelte 5** + **Tailwind CSS v4**.
-
-[Features](#features) • [Install](#install) • [Getting started](#getting-started) •
-[Building from source](#building-from-source) • [Contributing](#contributing)
 
 ![CI](https://github.com/JayCodist/ToggLinux/actions/workflows/ci.yml/badge.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-</div>
+ToggLinux is an unofficial Toggl Track desktop client for Linux. It runs from
+the system tray. It is built with Tauri v2 (Rust) and Svelte 5 plus Tailwind
+CSS v4.
 
-> **Disclaimer**
-> ToggLinux is an independent, unofficial client. It is **not affiliated with,
-> endorsed by, or sponsored by Toggl OÜ**. Toggl™ is a trademark of Toggl OÜ.
-> ToggLinux talks to the public Toggl Track REST API with *your own* API token and
-> never sends your data anywhere except `api.track.toggl.com`.
+- [Features](#features)
+- [Install](#install)
+- [Getting started](#getting-started)
+- [Building from source](#building-from-source)
+- [Contributing](#contributing)
 
-## Why another client?
+## Disclaimer
 
-The official desktop apps do not run on Linux. ToggLinux is a native Rust process
-with a WebKitGTK view — it starts instantly, idles at a fraction of the memory, and
-behaves like a proper Linux citizen:
+ToggLinux is an independent, unofficial client. It is not affiliated with,
+endorsed by, or sponsored by Toggl OÜ. Toggl is a trademark of Toggl OÜ.
+ToggLinux talks to the public Toggl Track REST API with your own API token.
+It sends your data only to `api.track.toggl.com`.
 
-- runs from the **system tray** and keeps the timer ticking in the background
-- **closes to tray** instead of quitting, so an accidental `X` never stops your day
-- **single instance** — launching again just surfaces the existing window
-- **autostart** entry, so the tray is there when you log in
-- talks **directly to the Toggl Track API** — no Electron, no bundled web app
-- your token lives in the **OS keyring**, never in a config file
+## Background
+
+The official desktop apps do not run on Linux. ToggLinux is a native Rust
+process with a WebKitGTK view. It starts fast, uses little memory, and runs
+like a normal Linux application:
+
+- It runs from the system tray and keeps the timer running in the background.
+- The close button hides the window to the tray. It does not stop the timer.
+- Only one instance runs. A second launch shows the existing window.
+- It can start automatically when you log in.
+- It talks directly to the Toggl Track API. There is no Electron and no
+  bundled web app.
+- Your token lives in the OS keyring, not in a config file.
 
 ## Features
 
-- ▶️ **One-click quick timer** — start and stop entries synced straight to Toggl
-  Track (window or tray)
-- 🔁 **Resume last entry** from the tray menu, prefilled with the last description
-- 🕒 **Live tray status** — the running entry while it ticks, today's total when idle
-- 🧮 **Today's tracked time** in the window, kept fresh by a background sync loop
-  (10 s while running, 30 s idle, instant refresh on window focus)
-- 🔐 **API-token auth** validated against `GET /me`, stored in the OS keyring, with
-  automatic session restore on launch and graceful logout when a token is rejected
-- 🚦 **Rate-limit aware**: honours Toggl's `429 + Retry-After` instead of hammering
-  the API
-- 🖥 **Daemon-like**: close-to-tray, single instance, autostart
-- 🌗 Light / dark / system theme via `prefers-color-scheme`
-- 📦 **`.deb`, `.rpm` and AppImage** packaging via the release pipeline
-  (prebuilt downloads coming soon)
+- Quick timer. Start and stop entries with one click from the window or the
+  tray. The entries sync to Toggl Track.
+- Resume the last entry from the tray menu. The description, project, and tags
+  are prefilled.
+- Live tray icon. The icon shows the time of the running entry while the timer
+  runs, and the total for today when it is stopped.
+- Time tracked today in the window. A background sync loop keeps the data
+  fresh.
+- API-token authentication. The app checks the token against `GET /me` and
+  stores it in the OS keyring. It restores the session at every start. If the
+  token is rejected, the app shows the sign-in screen again.
+- Rate-limit awareness. On a `429` response, the app waits for the number of
+  seconds in the `Retry-After` header. It does not send more requests.
+- Light, dark, and system themes.
+- `.deb`, `.rpm`, and AppImage packages are built by the release pipeline.
+  Prebuilt downloads will be available soon.
 
-Time *reports* are intentionally out of scope — use the web app for reporting,
-exactly like the official desktop clients do.
+Time reports are out of scope. Use the web app for reports. The official
+desktop clients do the same.
 
 ## Install
 
-Prebuilt packages are **coming soon**. The first published release will offer
-`.deb`, `.rpm` and AppImage assets here with per-distro install commands.
-Until then, please [build from source](#building-from-source) — ToggLinux is a
-small native app and compiles in a few minutes.
+Prebuilt packages are not published yet. The first published release will
+offer `.deb`, `.rpm`, and AppImage files with install commands for each
+distribution. Until then, build from source. See
+[Building from source](#building-from-source). ToggLinux is a small native
+app and compiles in a few minutes.
 
 Requirements for any install method: a GTK 3 desktop with
 `libayatana-appindicator` (Ubuntu and most spins ship this) and WebKitGTK 4.1.
-Target baseline is **Ubuntu 24.04+**, best effort on 22.04.
+The target baseline is Ubuntu 24.04 or newer. Support for 22.04 is best
+effort.
 
 ### GNOME tray icon
 
-Stock GNOME does not ship a StatusNotifier host. Install the
+GNOME does not have a StatusNotifier host. Install the
 **AppIndicator and KStatusNotifierItem Support** extension
 ([extensions.gnome.org](https://extensions.gnome.org/extension/615/appindicator-support/))
-to make the tray icon appear. Ubuntu's GNOME fork enables this out of the box.
+to make the tray icon appear. Ubuntu's GNOME fork has this built in.
 
-### Flatpak / Snap
+### Flatpak and Snap
 
-Not offered yet. Packaging for Flatpak and Snap is a welcome contribution —
-correctly self-hosting the tray (StatusNotifier) and the keyring inside a sandbox
-needs validation first. See the
+Not offered yet. Packaging for Flatpak and Snap is a welcome contribution.
+The tray (StatusNotifier) and the keyring must be set up correctly inside the
+sandbox first. See the
 [issue tracker](https://github.com/JayCodist/ToggLinux/issues) and
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Getting started
 
-1. Launch ToggLinux. The first screen asks for your **Toggl Track API token**,
-   available on your [profile page](https://track.toggl.com/profile).
-2. The token is written to your **system keyring** (service `com.togglinux.app`) and
-   is never stored on disk in plain text. Your session is restored automatically on
-   every launch.
-3. Hit **Start** — a quick entry begins and the tray item shows it ticking. **Stop**
-   from the window or the tray; the tray falls back to showing today's total.
-4. Next day, pick **Resume: …** in the tray to restart the last entry.
+1. Start ToggLinux. The first screen asks for your Toggl Track API token. You
+   can find the token on your
+   [profile page](https://track.toggl.com/profile).
+2. The app writes the token to your system keyring (service
+   `com.togglinux.app`). It never stores the token on disk in plain text. Your
+   session is restored automatically at every start.
+3. Click **Start**. A quick entry begins, and the tray icon shows the time
+   running. Click **Stop** in the window or the tray. The tray icon then shows
+   the total for today.
+4. The next day, pick **Resume: ...** in the tray menu to start the last entry
+   again.
 
-Nothing leaves your machine except authenticated calls to the Toggl Track API.
+Nothing leaves your machine except the authenticated calls to the Toggl Track
+API.
 
 ## Building from source
 
@@ -115,13 +123,13 @@ Rust comes from [rustup](https://rustup.rs) (stable), Node.js 20 or newer.
 
 ```bash
 npm install
-npm run tauri:dev      # Tauri window with hot reload (Vite on port 1420)
+npm run tauri:dev      # Tauri window with hot reload. Vite runs on port 1420.
 ```
 
 Useful checks:
 
 ```bash
-npm run check          # svelte-check + TypeScript
+npm run check          # svelte-check and TypeScript
 npm run build          # type-check and build the frontend bundle
 cd src-tauri && cargo check
 cargo fmt --check && cargo clippy -- -D warnings
@@ -130,50 +138,51 @@ cargo fmt --check && cargo clippy -- -D warnings
 ### Release build
 
 ```bash
-npm run tauri:build    # .deb / .rpm / AppImage under src-tauri/target/release/bundle
+npm run tauri:build    # .deb, .rpm, AppImage under src-tauri/target/release/bundle
 ```
 
 ## Project layout
 
 ```
 src/                       Svelte 5 UI
-  App.svelte               auth gate + view routing
+  App.svelte               auth gate and view routing
   lib/Auth.svelte          first-run token screen
-  lib/Timer.svelte         timer card
-  lib/timer.ts             shared types mirroring the Rust state
+  lib/Timer.svelte         timer bar
+  lib/timer.ts             shared types that mirror the Rust state
 src-tauri/src/
   lib.rs                   builder, commands, tray menu, startup
   state.rs                 app state, broadcasts, tray updates
   secrets.rs               keyring access for the API token
   sync.rs                  background polling loop
   toggl/                   Toggl Track API v9 client
-  main.rs                  binary entrypoint
+  main.rs                  binary entry point
 src-tauri/tauri.conf.json  window, CSP, bundle targets
 src-tauri/capabilities/    webview permission grants
 ```
 
-**Architecture in one line:** Rust owns all state (session, timer, tray, polling)
-and the webview is a thin view. Commands go down via `invoke()`, state comes back
-up as `emit()` events such as `timer-state`.
+**Architecture:** Rust owns all state (session, timer, tray, polling). The
+webview is a thin view. Commands go from the UI to Rust with `invoke()`. State
+comes back from Rust to the UI as `emit()` events, such as `timer-state`.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| No tray icon on GNOME | install the AppIndicator extension (see above) |
-| Token screen reappears with a saved token | the keyring daemon isn't running or the login collection is locked; start GNOME Keyring / KWallet and unlock it |
-| "token rejected" toast | the token was revoked or expired — paste a fresh one from your Toggl profile |
-| Entries look stale | the app refreshes on window focus; check network — the sync loop retries automatically |
+| No tray icon on GNOME | Install the AppIndicator extension (see above). |
+| Token screen reappears with a saved token | The keyring daemon is not running, or the login collection is locked. Start GNOME Keyring or KWallet and unlock it. |
+| "token rejected" message | The token was revoked or expired. Paste a new one from your Toggl profile. |
+| Entries look stale | The app refreshes when the window gets focus. Check your network. The sync loop retries on its own. |
 
 ## Contributing
 
-Bug reports, feature requests and pull requests are very welcome — start with
-[CONTRIBUTING.md](CONTRIBUTING.md) and please read
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Good first issues are labelled
-[`good first issue`](https://github.com/JayCodist/ToggLinux/issues?q=label%3A%22good+first+issue%22).
+Bug reports, feature requests, and pull requests are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md) and read
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Good first issues have the
+[`good first issue`](https://github.com/JayCodist/ToggLinux/issues?q=label%3A%22good+first+issue%22)
+label.
 
-To report a **security** issue, see [SECURITY.md](SECURITY.md) — please do not open
-a public issue for it.
+To report a security issue, see [SECURITY.md](SECURITY.md). Do not open a
+public issue for it.
 
 ## License
 
@@ -181,5 +190,5 @@ Released under the [MIT License](LICENSE).
 
 Copyright (c) 2026 ToggLinux contributors.
 
-Third-party trademarks and logos remain the property of their owners; this project
-ships no Toggl brand assets.
+Third-party trademarks and logos remain the property of their owners. This
+project ships no Toggl brand assets.

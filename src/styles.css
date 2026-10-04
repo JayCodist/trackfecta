@@ -1,27 +1,80 @@
 @import "tailwindcss";
 
-/* ---- Design tokens: browser-clean aesthetic, Toggl-ish accent ---- */
+/* ============================================================
+   ToggLinux design tokens. These mirror the official Toggl Track
+   desktop app (light and dark).
+   ============================================================ */
 :root {
-  --accent: #e0044b;
-  --accent-press: #b8033d;
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --text: #1c1e21;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --radius: 12px;
-  --shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 4px 16px rgb(0 0 0 / 0.06);
+  --accent: #dd3873;
+  --accent-press: #c22b61;
+  --accent-soft: rgb(221 56 115 / 0.12);
+
+  --bg: #f7f7f8; /* the list canvas, and the app background */
+  --panel: #ffffff; /* the timer bar and the popovers */
+  --group-head: #fbfbfc; /* the day-group header strip */
+  --row-hover: #f4f4f6;
+  --text: #2b2d33;
+  --text-strong: #1c1e21;
+  --muted: #9ca3af;
+  --muted-2: #6b7280;
+  --border: #ececee;
+  --border-2: #e2e3e7;
+
+  --radius: 10px;
+  --shadow-pop:
+    0 1px 3px rgb(0 0 0 / 0.1), 0 8px 28px rgb(0 0 0 / 0.12);
+
+  color-scheme: light;
 }
 
+/* Dark mode copies the charcoal panels of the desktop app. The
+   `:not([data-theme])` guard keeps the OS preference in charge only when the
+   user chose "system" in Settings > Appearance. An explicit choice pins the
+   scheme through the attribute. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #17181c;
-    --surface: #212329;
-    --text: #eceef1;
-    --muted: #9aa1ac;
-    --border: #32353d;
-    --shadow: 0 1px 3px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.35);
+  :root:not([data-theme]) {
+    --bg: #2a2a33;
+    --panel: #33333d;
+    --group-head: #33333d;
+    --row-hover: #3a3a45;
+    --text: #e7e8eb;
+    --text-strong: #f4f5f7;
+    --muted: #8b8f9c;
+    --muted-2: #a2a7b3;
+    --border: #3d3d48;
+    --border-2: #464652;
+    --accent-soft: rgb(221 56 115 / 0.22);
+    --shadow-pop:
+      0 1px 3px rgb(0 0 0 / 0.4), 0 8px 28px rgb(0 0 0 / 0.45);
+
+    color-scheme: dark;
   }
+}
+
+/* Dark that the user pinned (Settings > Appearance > Dark). */
+:root[data-theme="dark"] {
+  --bg: #2a2a33;
+  --panel: #33333d;
+  --group-head: #33333d;
+  --row-hover: #3a3a45;
+  --text: #e7e8eb;
+  --text-strong: #f4f5f7;
+  --muted: #8b8f9c;
+  --muted-2: #a2a7b3;
+  --border: #3d3d48;
+  --border-2: #464652;
+  --accent-soft: rgb(221 56 115 / 0.22);
+  --shadow-pop:
+    0 1px 3px rgb(0 0 0 / 0.4), 0 8px 28px rgb(0 0 0 / 0.45);
+
+  color-scheme: dark;
+}
+
+/* Light that the user pinned. The base tokens above are already light, and the
+   media query is guarded off. But native controls must follow the pinned
+   choice. */
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 html,
@@ -41,81 +94,834 @@ body {
     sans-serif;
   background: var(--bg);
   color: var(--text);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
-.shell {
-  min-height: 100%;
+.app {
+  height: 100%;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+/* Thin, quiet scrollbars, like the desktop app. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+
+/* ---------- top bar ---------- */
+/* The in-app top bar was removed. The native title bar has the name. */
+
+.icon-round {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 24px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+.icon-round:hover {
+  background: var(--row-hover);
+  color: var(--text);
+}
+.icon-round.active {
+  color: var(--accent);
+}
+.icon-round svg {
+  width: 16px;
+  height: 16px;
 }
 
-.topbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 14px 18px;
-}
-
-.brand {
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 28px;
-  width: min(420px, 100%);
+/* ---------- timer bar ---------- */
+.timerbar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.timerbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 6px;
 }
 
-.auth-card h1 {
-  margin: 0;
-  font-size: 22px;
+.desc-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text-strong);
+  font-size: 19px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+.desc-input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
 }
 
-.muted {
+.running-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timer-text {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  flex: none;
+}
+.timer-text.running {
+  color: var(--text-strong);
+}
+
+.play-btn {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+.play-btn:hover {
+  background: var(--accent-press);
+}
+.play-btn:active {
+  transform: scale(0.94);
+}
+.play-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.play-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.play-btn.stop-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* The second row: picker icon buttons and the selected chips. */
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 12px 10px;
+  flex-wrap: wrap;
+  min-height: 34px;
+}
+
+.chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: var(--chip-bg, transparent);
+  color: var(--muted-2);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  max-width: 260px;
+}
+.chip-btn:hover,
+.chip-btn.open {
+  background: var(--row-hover);
+  color: var(--text);
+}
+.chip-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.chip-btn .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-btn.selected {
+  color: var(--text);
+}
+/* The billable chip when ON: a gray pressed background. */
+.chip-btn.billable-on {
+  background: var(--border-2);
+  color: var(--text-strong);
+}
+.chip-btn.billable-on:hover {
+  background: var(--muted);
+}
+
+/* The shared dropdown. It looks like the project chip of the timer. */
+.dd-btn {
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  min-width: 150px;
+  justify-content: flex-start;
+}
+.dd-btn:hover,
+.dd-btn.open {
+  background: var(--row-hover);
+}
+.dd-caret {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--muted);
+  transform: rotate(180deg); /* the chevron points down when closed */
+  transition: transform 0.15s ease;
+}
+.dd-btn.open .dd-caret {
+  transform: rotate(0deg);
+}
+/* Open upward or leftward, so the menu never leaves the window edge. */
+.dd-pop {
+  position: fixed;
+  top: auto;
+  left: auto;
+  min-width: 200px;
+}
+.dd-pop .pop-list {
+  max-height: 240px;
+}
+/* The project chip: colored name and dot, muted client. Like the Toggl web
+   app. */
+.proj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+}
+.proj-chip .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip-sep {
+  color: var(--muted);
+  font-weight: 400;
+}
+.chip-client {
+  color: var(--muted-2);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  color: var(--muted-2);
+  border-radius: 999px;
+  font-size: 11.5px;
+  padding: 2px 8px;
+}
+.tag-chip button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  font-size: 12px;
+  line-height: 1;
+}
+.tag-chip button:hover {
+  color: var(--accent);
+}
+
+/* popovers */
+.pop-anchor {
+  position: relative;
+}
+.pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  min-width: 240px;
+  max-width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  padding: 6px;
+}
+.pop-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 6px 8px 4px;
+}
+.pop-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.pop-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.pop-item:hover {
+  background: var(--row-hover);
+}
+.pop-item .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop-empty {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.pop-input {
+  width: 100%;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 9px;
+  outline: none;
+  margin-bottom: 4px;
+  box-sizing: border-box;
+}
+.pop-input:focus {
+  border-color: var(--accent);
+}
+.pop-check {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 13px;
+}
+.pop-clear {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  text-align: left;
+  padding: 8px;
+  margin-top: 4px;
+  border-radius: 0 0 7px 7px;
+  cursor: pointer;
+}
+.pop-clear:hover {
+  color: var(--accent);
+}
+.muted-label {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Suggestions from recent entries, under the description input. */
+.desc-anchor {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.pop.sugg {
+  left: -12px;
+  min-width: 300px;
+}
+.sugg-item {
+  align-items: flex-start;
+}
+.sugg-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sugg-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sugg-sub .dot {
+  width: 7px;
+  height: 7px;
+}
+.sugg-client {
   color: var(--muted);
 }
 
-.fineprint {
+/* The client label in entry rows. */
+.row-client {
+  font-size: 12px;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Checkbox rows in the entry forms. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  flex: none;
+}
+
+/* The diagnostics section in Settings. */
+.diag {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px 8px;
+}
+.diag-path {
   font-size: 11px;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diag-log {
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
   margin: 0;
 }
 
+/* ---------- tabs ---------- */
+.tabs {
+  display: flex;
+  justify-content: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.tab {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 30px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}
+.tab:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ---------- entry list ---------- */
+/* A container that does not scroll, so the add-entry button stays pinned to
+   the bottom-right while the list itself scrolls. */
+.list-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+.list {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  min-height: 0;
+}
+
+.day-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  background: var(--group-head);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+.day-head:hover {
+  background: var(--row-hover);
+}
+.day-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.day-total {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.day-head .chev {
+  color: var(--muted);
+  display: inline-flex;
+}
+.day-head .chev svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+.day-head.collapsed .chev svg {
+  transform: rotate(180deg);
+}
+
+.rows {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  min-height: 56px;
+}
+.row:last-child {
+  border-bottom: none;
+}
+.row:hover {
+  background: var(--row-hover);
+}
+.row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.row-desc {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-desc.untitled {
+  color: var(--muted);
+  font-weight: 400;
+}
+.row-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.row-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-tag {
+  font-size: 11.5px;
+  color: var(--muted-2);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.row:hover .row-actions,
+.row:focus-within .row-actions {
+  opacity: 1;
+}
+/* Keep the billable marker visible even without hover. */
+.row-billable {
+  flex: none;
+  color: var(--muted-2);
+  display: inline-flex;
+}
+.row-billable svg {
+  width: 14px;
+  height: 14px;
+}
+
+.row-dur {
+  flex: none;
+  min-width: 64px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.row-dur.running {
+  color: var(--accent);
+}
+.row-time {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+  text-align: right;
+}
+.dirty-dot {
+  color: var(--accent);
+  font-size: 10px;
+  flex: none;
+}
+
+.row-stop {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease;
+}
+.row-stop:hover {
+  background: var(--accent-soft);
+}
+.row-stop i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  display: block;
+}
+
+/* The inline edit form inside a row. */
+.edit-form {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+.edit-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* empty state */
+.empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+/* The footer button that grows the history window. */
+.load-earlier {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 4px 16px 72px;
+  padding: 9px;
+  border: 1px dashed var(--border-2);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.load-earlier:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.load-earlier:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The live quota line in Settings. */
+.quota-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+.quota-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green, #4caf50);
+}
+.quota-dot.low {
+  background: var(--accent);
+}
+
+/* The floating add-entry button. */
+.fab {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  /* Above the sticky day-group headers (z-index 5), so it never hides behind
+     them. */
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--panel);
+  color: var(--muted-2);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-pop);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.fab:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The manual-entry card. The add-entry button shows and hides it. */
+.manual-card {
+  margin: 12px 16px 0;
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.manual-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- shared form atoms ---------- */
 .input {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 9px 11px;
+  border: 1px solid var(--border-2);
   border-radius: 8px;
   background: var(--bg);
   color: var(--text);
-  font-size: 14px;
+  font-size: 13.5px;
   outline: none;
+  min-width: 0;
 }
 .input:focus {
   border-color: var(--accent);
 }
+.input.time {
+  width: auto;
+}
+select.input {
+  appearance: auto;
+}
 
 .btn {
-  padding: 10px 16px;
+  padding: 9px 16px;
   border: none;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.05s ease, background 0.15s ease;
@@ -134,54 +940,203 @@ body {
   opacity: 0.5;
   cursor: default;
 }
-.btn.stop {
-  background: var(--surface);
+.btn.ghost {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+}
+.btn.ghost:hover {
+  border-color: var(--muted);
+}
+
+.link {
+  background: none;
+  border: none;
   color: var(--accent);
-  border: 1.5px solid var(--accent);
-}
-
-.timer-card {
-  align-items: center;
-  text-align: center;
-}
-
-.clock {
-  font-variant-numeric: tabular-nums;
-  font-size: 44px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.clock.running {
-  color: var(--accent);
-}
-
-.desc {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+a.link {
+  text-decoration: none;
+}
+a.link:hover {
+  text-decoration: underline;
 }
 
-.desc-input {
-  width: 100%;
-  text-align: center;
-  font-size: 15px;
+.muted {
+  color: var(--muted-2);
 }
-
+.fineprint {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0;
+}
 .error {
   margin: 0;
   font-size: 13px;
   color: var(--accent);
 }
+.quota {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  padding: 8px 16px;
+}
 
+/* ---------- settings panel ---------- */
+.settings {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.set-group {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 14px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-group .set-row:last-child {
+  border-bottom: none;
+}
+.set-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.set-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.set-main {
+  flex: 1;
+  min-width: 0;
+}
+.set-ctl {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.set-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong);
+  margin: 2px 2px 0;
+}
+
+/* The toggle switch. */
+.switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: none;
+  background: var(--border-2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex: none;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.15s ease;
+}
+.switch.on {
+  background: var(--accent);
+}
+.switch.on::after {
+  transform: translateX(16px);
+}
+.switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- auth screen ---------- */
+.auth-wrap {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  padding: 28px;
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card h1 {
+  margin: 0;
+  font-size: 21px;
+  color: var(--text-strong);
+}
+.auth-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* ---------- toast ---------- */
 .toast {
   position: fixed;
   bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text);
-  color: var(--surface);
+  background: var(--text-strong);
+  color: var(--panel);
   padding: 10px 16px;
   border-radius: 8px;
   font-size: 13px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-pop);
   max-width: min(420px, 90vw);
+  z-index: 60;
+}
+
+/* The click-away shield for popovers. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: default;
 }

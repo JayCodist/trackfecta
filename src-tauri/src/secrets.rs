@@ -19,3 +19,9 @@ pub fn set_token(token: &str) -> Result<(), String> {
         .set_password(token)
         .map_err(|e| e.to_string())
 }
+
+pub fn delete_token() {
+    if let Ok(e) = entry() {
+        let _ = e.delete_credential();
+    }
+}

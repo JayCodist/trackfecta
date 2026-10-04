@@ -5,8 +5,8 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
 
-  // No callback needed: on success the Rust side flips `timer-state`.status to
-  // "connected" and App.svelte swaps the view automatically.
+  // No callback is needed. On success, the Rust side sets the status in
+  // timer-state to "connected". App.svelte then swaps the view by itself.
   async function saveToken() {
     busy = true;
     error = null;
@@ -20,14 +20,18 @@
   }
 </script>
 
-<main class="shell">
+<main class="auth-wrap">
   <section class="card auth-card">
+    <span class="auth-logo">⏱</span>
     <h1>Welcome to ToggLinux</h1>
-    <p class="muted">
+    <p class="muted" style="margin:0;font-size:13.5px;line-height:1.5">
       Paste your Toggl&nbsp;Track API token to get started. You can find it on your
-      <a href="https://track.toggl.com/profile" target="_blank" rel="noreferrer">
-        profile page
-      </a>. It is stored securely in your system keyring.
+      <a
+        class="link"
+        href="https://track.toggl.com/profile"
+        target="_blank"
+        rel="noreferrer">profile page</a>.
+      It is stored securely in your system keyring.
     </p>
     <input
       class="input"
