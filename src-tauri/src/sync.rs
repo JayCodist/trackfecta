@@ -186,7 +186,7 @@ async fn push_dirty(app: &AppHandle<Wry>) -> bool {
         "tags": dirty.tags,
         "billable": dirty.billable,
         "duronly": false,
-        "created_with": "ToggLinux",
+        "created_with": "TrackFecta",
     });
     if dirty.id > 0 && dirty.stop.is_none() {
         // This is an edit of a running entry on the server. Send only the
@@ -256,7 +256,10 @@ async fn handle_push_error(
                 &format!("push {} rate-limited, retry in {retry_after}s", dirty.id),
             );
             note_rate_limit(app, retry_after);
-            emit_toast(app, &format!("API limit reached. Retrying in {retry_after}s."));
+            emit_toast(
+                app,
+                &format!("API limit reached. Retrying in {retry_after}s."),
+            );
             tokio::time::sleep(Duration::from_secs(retry_after.max(30))).await;
         }
         other => {
@@ -322,7 +325,6 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
             if let Some(store) = st.store.as_ref() {
                 store.set_meta("quota_blocked_until", 0);
             }
-            drop(st);
             // Take the first snapshot right away. The full window plus the
             // reconcile step applies deletions made on other devices while
             // this app was offline.
@@ -338,7 +340,6 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
                 // The token was revoked or expired. Stop using it and show
                 // the Auth screen.
                 *st.token.lock().unwrap() = None;
-                drop(st);
                 mark_disconnected(app);
                 Err(e)
             }
@@ -346,7 +347,6 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
                 // The quota window is full. Honor the server's reset time.
                 // Stay "verifying". The loop pauses reconnects until the
                 // block lifts. See tick.
-                drop(st);
                 note_rate_limit(app, retry_after);
                 Err(e)
             }
@@ -370,8 +370,39 @@ fn note_rate_limit(app: &AppHandle<Wry>, retry_after: u64) {
         let until = chrono::Utc::now().timestamp() + d.as_secs() as i64;
         store.set_meta("quota_blocked_until", until);
     }
-    drop(st);
     broadcast(app);
+}
+
+/// One manual sync step, from the Sync-now button in Settings. Runs the
+/// same two steps as a loop tick right now: push one queued change, or
+/// poll once. Unlike background polling, a manual sync may spend the last
+/// interactive slots of the window (it only needs `has_headroom`), but it
+/// never sends anything during a server block.
+pub async fn force_sync(app: &AppHandle<Wry>) -> Result<(), String> {
+    let connected = app.state::<AppState>().session.lock().unwrap().is_some();
+    if !connected {
+        return Err("Not connected to Toggl.".into());
+    }
+    if !app.state::<AppState>().budget.has_headroom() {
+        return Err("API quota reached. Wait for a slot to free up.".into());
+    }
+    // Queued local changes outrank a poll, same as the loop.
+    if push_dirty(app).await {
+        return Ok(());
+    }
+    match refresh(app).await {
+        Ok(()) => Ok(()),
+        Err(TogglError::Unauthorized) => {
+            *app.state::<AppState>().token.lock().unwrap() = None;
+            mark_disconnected(app);
+            Err("Token rejected. Please enter it again.".into())
+        }
+        Err(TogglError::RateLimited { retry_after }) => {
+            note_rate_limit(app, retry_after);
+            Err(format!("API limit reached. Retry in {retry_after}s."))
+        }
+        Err(other) => Err(other.to_string()),
+    }
 }
 
 /// Pulls entries changed since the last sync, or a full page on the first
@@ -454,8 +485,7 @@ async fn refresh_inner(app: &AppHandle<Wry>, full: bool) -> Result<(), TogglErro
                 .filter(|e| !e.is_deleted())
                 .map(|e| e.id)
                 .collect();
-            let removed =
-                store.reconcile_absent(workspace_id, start_of_window(days), &present);
+            let removed = store.reconcile_absent(workspace_id, start_of_window(days), &present);
             if removed > 0 {
                 crate::logger::log(
                     "info",
@@ -538,11 +568,7 @@ async fn fetch_reference_data(app: &AppHandle<Wry>) {
         let Some(Session { client, user }) = guard.as_ref() else {
             return;
         };
-        (
-            client.clone(),
-            st.store.clone(),
-            user.default_workspace_id,
-        )
+        (client.clone(), st.store.clone(), user.default_workspace_id)
     };
     let Some(store) = store else { return };
     let mut changed = false;

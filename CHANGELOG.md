@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to ToggLinux are documented here. The format follows
+All notable changes to TrackFecta are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -26,4 +26,4 @@ First public release.
 - Release workflow builds `.deb`, `.rpm` and AppImage bundles for GitHub
   Releases (first published release coming soon).
 
-[1.0.0]: https://github.com/JayCodist/ToggLinux/releases/tag/v1.0.0
+[1.0.0]: https://github.com/JayCodist/trackfecta/releases/tag/v1.0.0

@@ -86,7 +86,7 @@ impl Store {
     pub fn open(data_dir: &Path) -> Option<Store> {
         let dir = data_dir.join("cache");
         std::fs::create_dir_all(&dir).ok()?;
-        let conn = Connection::open(dir.join("togglinux.db")).ok()?;
+        let conn = Connection::open(dir.join("trackfecta.db")).ok()?;
         conn.pragma_update(None, "journal_mode", "WAL").ok()?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS time_entries (
@@ -249,14 +249,15 @@ impl Store {
     /// The cached project ids that are not in the given set. Sync uses this
     /// to drop projects that were deleted on the server.
     pub fn project_ids_except(&self, keep: &[i64]) -> Vec<i64> {
-        let Ok(conn) = self.conn.lock() else { return Vec::new() };
+        let Ok(conn) = self.conn.lock() else {
+            return Vec::new();
+        };
         let Ok(mut stmt) = conn.prepare("SELECT id FROM picker_projects") else {
             return Vec::new();
         };
         stmt.query_map([], |r| r.get::<_, i64>(0))
             .map(|it| {
                 it.filter_map(Result::ok)
-                    .into_iter()
                     .filter(|id| !keep.contains(id))
                     .collect()
             })
@@ -403,7 +404,6 @@ impl Store {
             .query_map(params![workspace_id, from_ts], |r| r.get::<_, i64>(0))
             .map(|it| {
                 it.filter_map(Result::ok)
-                    .into_iter()
                     .filter(|id| !present_ids.contains(id))
                     .collect()
             })
@@ -447,7 +447,19 @@ impl Store {
     }
 
     /// Local write-through for edits and deletes. This keeps the UI instant.
-    pub fn update_local(&self, id: i64, description: Option<&str>, tags: &[String], start: i64, stop: Option<i64>, project_id: Option<i64>, billable: bool) {
+    // The fields mirror a time entry. Bundling them into a struct would only
+    // add a type used once, so the flat form stays.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_local(
+        &self,
+        id: i64,
+        description: Option<&str>,
+        tags: &[String],
+        start: i64,
+        stop: Option<i64>,
+        project_id: Option<i64>,
+        billable: bool,
+    ) {
         let Ok(conn) = self.conn.lock() else { return };
         let duration = match stop {
             Some(s) => (s - start) as f64,
@@ -459,7 +471,16 @@ impl Store {
              SET description=?2, tags=?3, start_ts=?4, stop_ts=?5, duration=?6,
                  project_id=?7, billable=?8, dirty=1
              WHERE id=?1",
-            params![id, description, tags.join(","), start, stop, duration, project_id, billable as i64],
+            params![
+                id,
+                description,
+                tags.join(","),
+                start,
+                stop,
+                duration,
+                project_id,
+                billable as i64
+            ],
         );
     }
 
@@ -497,10 +518,8 @@ impl Store {
                     );
                 }
                 None => {
-                    let _ = conn.execute(
-                        "UPDATE time_entries SET dirty=0 WHERE id=?1",
-                        params![id],
-                    );
+                    let _ =
+                        conn.execute("UPDATE time_entries SET dirty=0 WHERE id=?1", params![id]);
                 }
             }
         }

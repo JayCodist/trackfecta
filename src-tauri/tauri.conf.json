@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ToggLinux",
+  "productName": "TrackFecta",
   "version": "1.0.0",
-  "identifier": "com.togglinux.app",
+  "identifier": "com.trackfecta.app",
   "build": {
     "beforeDevCommand": "npm run vite",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ToggLinux",
+        "title": "TrackFecta",
         "width": 480,
         "height": 620,
         "minWidth": 400,
@@ -42,9 +42,17 @@
       }
     },
     "shortDescription": "Unofficial Toggl Track desktop client",
-    "longDescription": "ToggLinux is an unofficial, tray-first desktop client for Toggl Track on Linux. Not affiliated with Toggl.",
+    "longDescription": "TrackFecta is an unofficial, tray-first desktop client for Toggl Track on Linux. Not affiliated with Toggl.",
     "license": "MIT",
-    "homepage": "https://github.com/JayCodist/ToggLinux",
+    "homepage": "https://github.com/JayCodist/trackfecta",
     "category": "Productivity"
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZEQkJGRTc2N0YxRjJENDEKUldSQkxSOS9kdjY3Yld3cTRaSWIrSVlPSlFrdHgwV2kyMkRJWUpVQytHQ1hzUXdyRHQwekZ5b2sK",
+      "endpoints": [
+        "https://github.com/JayCodist/trackfecta/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

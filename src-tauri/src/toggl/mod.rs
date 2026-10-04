@@ -6,6 +6,4 @@ mod client;
 mod models;
 
 pub use client::{TogglClient, TogglError};
-pub use models::{
-    Client, TimeEntry, UserInfo, WorkspaceProject, WorkspaceTag,
-};
+pub use models::{Client, TimeEntry, UserInfo, WorkspaceProject, WorkspaceTag};

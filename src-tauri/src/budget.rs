@@ -173,7 +173,7 @@ impl Budget {
 
 /// Format a wait time for a message: "28m", "1h 05m". Rounds minutes up.
 pub fn fmt_wait(d: Duration) -> String {
-    let mins = (d.as_secs() + 59) / 60;
+    let mins = d.as_secs().div_ceil(60);
     if mins < 60 {
         format!("{mins}m")
     } else {

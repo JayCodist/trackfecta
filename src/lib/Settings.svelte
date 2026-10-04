@@ -1,5 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { getVersion } from "@tauri-apps/api/app";
+  import { listen } from "@tauri-apps/api/event";
   import {
     disable as disableAutostart,
     enable as enableAutostart,
@@ -7,6 +9,7 @@
   } from "@tauri-apps/plugin-autostart";
   import { projectColor, applyTheme, dotColor, fmtWait, type ProjectOption, type TimerState } from "./timer";
   import Dropdown, { type DropdownOption } from "./Dropdown.svelte";
+  import Icons from "./Icons.svelte";
 
   let { projects, timer }: { projects: ProjectOption[]; timer: TimerState } =
     $props();
@@ -72,6 +75,83 @@
     );
   }
 
+  // App self-update. `appVersion` comes from the bundle metadata, so it is
+  // never hard-coded. `updateInfo` is the last check result. The background
+  // task and a manual check both fill it.
+  let appVersion = $state("");
+  getVersion()
+    .then((v) => (appVersion = v))
+    .catch(() => {});
+  type UpdateInfo = {
+    available: boolean;
+    currentVersion: string;
+    latestVersion: string | null;
+    notes: string | null;
+    releaseUrl: string;
+    storeManaged: boolean;
+    canInstall: boolean;
+    checked: boolean;
+  };
+  let updateInfo = $state<UpdateInfo | null>(null);
+  let updateBusy = $state(false);
+  let installing = $state(false);
+
+  async function checkUpdates() {
+    updateBusy = true;
+    error = null;
+    note = null;
+    try {
+      updateInfo = await invoke<UpdateInfo>("check_for_updates");
+      if (updateInfo.available) {
+        note = null;
+      } else if (updateInfo.checked) {
+        note = "You are up to date.";
+      } else {
+        note = "Could not reach the update server. Check your connection.";
+      }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      updateBusy = false;
+    }
+  }
+
+  async function installUpdate() {
+    installing = true;
+    error = null;
+    try {
+      // A success restarts the app, so this call does not return.
+      await invoke("install_update");
+    } catch (e) {
+      error = String(e);
+      installing = false;
+    }
+  }
+
+  async function openRelease() {
+    try {
+      await invoke("open_release_page");
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  // Fetch the last check on mount, and keep the banner fresh when the
+  // background task finds an update while Settings is open.
+  $effect(() => {
+    invoke<UpdateInfo | null>("get_update_info")
+      .then((i) => {
+        if (i) updateInfo = i;
+      })
+      .catch(() => {});
+    const un = listen<UpdateInfo>("update-available", (e) => {
+      updateInfo = e.payload;
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  });
+
   $effect(() => {
     invoke<{
       hourlyCap: number;
@@ -118,6 +198,30 @@
       note = "Quota cap saved.";
     } catch (e) {
       error = String(e);
+    }
+  }
+
+  // Sync now: one manual sync step through the sync_now command. A manual
+  // sync may spend the last interactive slots of the window, so it works
+  // even when background polling is paused. Disabled when the quota is
+  // exhausted or a server block is active: sending a request then only
+  // earns another 429.
+  let syncing = $state(false);
+  const canSync = $derived(
+    timer.status === "connected" && !timer.blocked && timer.requestsLeft > 0,
+  );
+
+  async function syncNow() {
+    syncing = true;
+    error = null;
+    note = null;
+    try {
+      await invoke("sync_now");
+      note = "Synced.";
+    } catch (e) {
+      error = String(e);
+    } finally {
+      syncing = false;
     }
   }
 
@@ -586,7 +690,7 @@
               Global shortcuts need an X11 session. On Wayland, GNOME can
               bind the same keys for you: open Settings app, Keyboard, View
               and Customize Shortcuts, Custom Shortcuts, and add a command
-              for <code>togglinux</code> with your chosen shortcut. In the
+              for <code>trackfecta</code> with your chosen shortcut. In the
               window, Ctrl+D always works.
             {/if}
           </div>
@@ -660,6 +764,19 @@
             {#if timer.blocked}
               · next sync in {fmtWait(timer.nextSyncIn)}
             {/if}
+            <button
+              class="btn sync"
+              title={canSync
+                ? "Sync now (spends 1 request)"
+                : "No API quota left this hour"}
+              disabled={!canSync || syncing}
+              onclick={syncNow}
+            >
+              <span class="sync-ico" class:spin={syncing}
+                ><Icons name="sync" size={12} /></span
+              >
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
           </div>
         </div>
         <div class="set-ctl">
@@ -759,7 +876,14 @@
       <div class="set-row">
         <div class="set-main">
           <div class="set-label">
-            ToggLinux <span class="muted" style="font-weight:400">v1.0.0</span>
+            TrackFecta <span class="muted" style="font-weight:400">v{appVersion}</span>
+            {#if projects.length > 0}
+              <span
+                class="dot"
+                title="Recent projects loaded"
+                style="background:{projectColor(projects[0].name)}"
+              ></span>
+            {/if}
           </div>
           <div class="set-hint">
             Unofficial Toggl Track desktop client for Linux. Not affiliated
@@ -767,15 +891,43 @@
           </div>
         </div>
         <div class="set-ctl">
-          {#if projects.length > 0}
-            <span
-              class="dot"
-              title="Recent projects loaded"
-              style="background:{projectColor(projects[0].name)}"
-            ></span>
-          {/if}
+          <button class="btn ghost" disabled={updateBusy} onclick={checkUpdates}>
+            {updateBusy ? "Checking…" : "Check for updates"}
+          </button>
         </div>
       </div>
+      {#if updateInfo?.available}
+        <div class="update-banner">
+          <div class="update-main">
+            <div class="update-title">
+              Version {updateInfo.latestVersion} is available
+            </div>
+            {#if updateInfo.storeManaged}
+              <div class="update-notes">
+                Your app store delivers updates for this package. Update it
+                with your software center or the command line.
+              </div>
+            {:else if !updateInfo.canInstall}
+              <div class="update-notes">
+                Download the new package from the release page and install
+                it. This build updates through your package manager.
+              </div>
+            {:else if updateInfo.notes}
+              <div class="update-notes">{updateInfo.notes}</div>
+            {/if}
+          </div>
+          <div class="update-ctl">
+            <button class="btn ghost" onclick={openRelease}>
+              Release page
+            </button>
+            {#if updateInfo.canInstall}
+              <button class="btn primary" disabled={installing} onclick={installUpdate}>
+                {installing ? "Installing…" : "Update now"}
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 </div>

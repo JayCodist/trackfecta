@@ -33,7 +33,10 @@ pub fn spawn(app: AppHandle<Wry>) {
     }
     // One parked thread per signal. Both block on the socket and use no CPU
     // until logind sends the event.
-    for (signal, name) in [("PrepareForSleep", "power-sleep"), ("PrepareForShutdown", "power-shutdown")] {
+    for (signal, name) in [
+        ("PrepareForSleep", "power-sleep"),
+        ("PrepareForShutdown", "power-shutdown"),
+    ] {
         let app = app.clone();
         if std::thread::Builder::new()
             .name(name.into())

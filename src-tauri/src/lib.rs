@@ -8,6 +8,7 @@ mod store;
 mod sync;
 mod toggl;
 mod tray;
+mod update;
 
 use std::sync::Arc;
 
@@ -25,9 +26,12 @@ use store::{EntryRow, PickerProject};
 /// Gives the UI the current state when it starts.
 /// The UI calls this on mount. The first timer-state broadcast can happen
 /// before the webview starts listening. This command covers that gap.
+/// The snapshot fills the list from the cache, so a returning user sees
+/// their data at once, even when no broadcast has run yet (for example
+/// during a quota block at startup). Reading the cache uses no requests.
 #[tauri::command]
 fn get_state(state: tauri::State<'_, AppState>) -> TimerState {
-    state.timer.lock().unwrap().clone()
+    state::snapshot(&state)
 }
 
 /// Gives an idle prompt that is waiting for an answer. The UI calls this on
@@ -75,6 +79,15 @@ fn resume_last(app: tauri::AppHandle<Wry>) {
     request_resume(&app);
 }
 
+/// Runs one sync step right now, from the Sync-now button in Settings.
+/// Returns a user-facing error when there is no session or the hourly
+/// quota window is full; the button is disabled in that case, so the
+/// error only covers the race between the click and the state update.
+#[tauri::command]
+async fn sync_now(app: tauri::AppHandle<Wry>) -> Result<(), String> {
+    sync::force_sync(&app).await
+}
+
 /// Removes the token from the keyring and from memory, then shows the Auth
 /// screen.
 #[tauri::command]
@@ -115,7 +128,6 @@ fn extend_window(app: tauri::AppHandle<Wry>) -> Result<(), String> {
     // cache does not change it.
     let start = state::start_of_window(next);
     store.set_meta("last_sync", start);
-    drop(st);
     broadcast(&app);
     app.state::<AppState>().wakeup.notify_one();
     Ok(())
@@ -290,7 +302,6 @@ fn set_setting(
             None => store.clear_setting(&key),
         }
     }
-    drop(st);
     if key == "tray_show_seconds" {
         // Draw the tray icon again with the new format.
         tray::refresh(&app);
@@ -311,6 +322,9 @@ fn set_setting(
 
 /// Edits an entry. Writes the change to the cache at once and puts the push
 /// in the queue.
+// The parameters are the Tauri IPC contract with the UI. A struct would
+// change the wire format, so the flat form stays.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 fn update_entry(
     app: tauri::AppHandle<Wry>,
@@ -466,7 +480,6 @@ fn resolve_idle(app: tauri::AppHandle<Wry>, action: String) -> Result<(), String
         t.started_at = Some(pending.idle_end.to_string());
         *st.entry_id.lock().unwrap() = None;
     }
-    drop(st);
     broadcast(&app);
     app.state::<AppState>().wakeup.notify_one();
     Ok(())
@@ -477,6 +490,33 @@ fn resolve_idle(app: tauri::AppHandle<Wry>, action: String) -> Result<(), String
 /// The default global shortcut. Alt keeps it clear of browser and editor
 /// bindings, and of the app-local Ctrl+D.
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Alt+D";
+
+// ---------- app self-update ----------
+
+/// Gives the UI the last update-check result. None before the first check
+/// finishes. The Settings About section fetches this on mount.
+#[tauri::command]
+fn get_update_info(state: tauri::State<'_, update::UpdateState>) -> Option<update::Info> {
+    state.last.lock().unwrap().clone()
+}
+
+/// Checks for an app update now. Returns the result for the Settings row.
+#[tauri::command]
+async fn check_for_updates(app: tauri::AppHandle<Wry>) -> update::Info {
+    update::check_now(&app).await
+}
+
+/// Installs the newest update and restarts the app.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle<Wry>) -> Result<(), String> {
+    update::install(&app).await
+}
+
+/// Opens the release page for the newest version in the browser.
+#[tauri::command]
+fn open_release_page(app: tauri::AppHandle<Wry>) -> Result<(), String> {
+    update::open_release(&app)
+}
 
 /// True on a Wayland session. The global-hotkey backend needs X11; there
 /// is no Wayland protocol for grabbing keys.
@@ -504,7 +544,6 @@ fn apply_hotkey(app: &AppHandle<Wry>) -> Result<(), String> {
         .as_ref()
         .and_then(|s| s.get_setting("hotkey"))
         .unwrap_or_else(|| DEFAULT_HOTKEY.to_string());
-    drop(st);
     let gs = app.global_shortcut();
     // Always clear first. unregister_all is safe with nothing registered.
     gs.unregister_all().map_err(|e| e.to_string())?;
@@ -604,7 +643,7 @@ fn do_start(app: &AppHandle<Wry>, payload: StartPayload) -> Result<(), String> {
         if st.timer.lock().unwrap().running {
             return Err("a timer is already running".into());
         }
-        (require_workspace(&app)?, st.store.clone())
+        (require_workspace(app)?, st.store.clone())
     };
 
     let now = chrono::Utc::now();
@@ -677,7 +716,6 @@ pub(crate) fn do_stop(app: &AppHandle<Wry>) -> Result<(), String> {
         t.started_at = None;
         *st.entry_id.lock().unwrap() = None;
     }
-    drop(st);
     broadcast(app);
     app.state::<AppState>().wakeup.notify_one();
     Ok(())
@@ -686,12 +724,7 @@ pub(crate) fn do_stop(app: &AppHandle<Wry>) -> Result<(), String> {
 /// Shows the window and asks the UI to prefill a new entry from the last
 /// entry: description, project, and tags.
 fn request_resume(app: &AppHandle<Wry>) {
-    let last = app
-        .state::<AppState>()
-        .last_entry
-        .lock()
-        .unwrap()
-        .clone();
+    let last = app.state::<AppState>().last_entry.lock().unwrap().clone();
     if let Some(w) = app.get_webview_window("main") {
         show_window(&w);
     }
@@ -718,6 +751,30 @@ pub fn run() {
             Some(vec!["--hidden"]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Opens external links (target=_blank anchors) in the OS default
+        // browser. The webview cannot open a new window on its own.
+        .plugin(tauri_plugin_opener::init())
+        // App self-update. The plugin reads the signed release manifest and
+        // installs updates. The webview does not call it directly; the Rust
+        // commands in this file drive it. So no updater capability entry is
+        // needed.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // Remember the window size and position across restarts. The
+        // plugin restores them when the window is ready and saves them on
+        // exit. State lives in the app data dir; no frontend API is used,
+        // so no capability entries are needed. VISIBLE is excluded on
+        // purpose: this app hides instead of closing, so a saved
+        // "hidden" state would make a normal launch look dead. The
+        // --hidden flag still covers autostart.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .setup(|app| {
             // ---- Start file logging first. Everything after this is logged. ----
             logger::install_panic_hook();
@@ -732,6 +789,7 @@ pub fn run() {
                 .and_then(|dir| store::Store::open(&dir))
                 .map(Arc::new);
             app.manage(AppState::new(store));
+            app.manage(update::UpdateState::new());
             // Apply the hourly cap from settings. Paid plans allow more than 30.
             if let Some(cap) = app
                 .state::<AppState>()
@@ -763,7 +821,7 @@ pub fn run() {
             // ---- Tray menu: status item with changing text, and actions ----
             // Linux trays do not get mouse events. All operations are in the menu.
             let status = MenuItem::with_id(app, "status", "Today: 0:00", true, None::<&str>)?;
-            let show = MenuItem::with_id(app, "show", "Show ToggLinux", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "Show TrackFecta", true, None::<&str>)?;
             let resume =
                 MenuItem::with_id(app, "resume", "Resume last entry", false, None::<&str>)?;
             let stop = MenuItem::with_id(app, "stop", "Stop timer", false, None::<&str>)?;
@@ -781,7 +839,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
-                .tooltip("ToggLinux: unofficial Toggl Track client")
+                .tooltip("TrackFecta: unofficial Toggl Track client")
                 .on_menu_event(|app, event| match event.id().0.as_str() {
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
@@ -824,6 +882,9 @@ pub fn run() {
             }
 
             // ---- Startup: restore the session if a token is in the keyring ----
+            // First move a token saved under the pre-rename service, so an
+            // existing install keeps its session. No-op on a fresh install.
+            secrets::migrate_from_old_service();
             // A temporary failure, such as being offline at startup, leaves the
             // status as verifying. The sync loop retries connect with the
             // cached token by itself. While a quota block is active, skip the
@@ -854,6 +915,9 @@ pub fn run() {
             // ---- background polling loop ----
             sync::spawn(app.handle().clone());
 
+            // ---- app self-update: a daily check against GitHub Releases ----
+            update::spawn(app.handle().clone());
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -877,6 +941,7 @@ pub fn run() {
             start_timer,
             stop_timer,
             resume_last,
+            sync_now,
             get_entries,
             extend_window,
             get_picker_projects,
@@ -887,8 +952,12 @@ pub fn run() {
             delete_entry,
             create_entry,
             resolve_idle,
-            get_diagnostics
+            get_diagnostics,
+            get_update_info,
+            check_for_updates,
+            install_update,
+            open_release_page
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ToggLinux");
+        .expect("error while running TrackFecta");
 }

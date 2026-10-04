@@ -16,7 +16,7 @@ should upgrade as part of any fix rollout.
 
 Report them privately through the GitHub security advisory system:
 
-<https://github.com/JayCodist/ToggLinux/security/advisories/new>
+<https://github.com/JayCodist/trackfecta/security/advisories/new>
 
 You can expect:
 
@@ -46,7 +46,7 @@ Toggl API token** from any reproduction material.
 
 ## Relevant project facts
 
-- ToggLinux stores the API token via the OS keyring (service `com.togglinux.app`)
+- TrackFecta stores the API token via the OS keyring (service `com.trackfecta.app`)
   and never writes it to disk or logs.
 - Network calls go only to `api.track.toggl.com` over HTTPS.
 - The webview runs with a restrictive CSP and a minimal capability set

@@ -1,0 +1,103 @@
+# TrackFecta Snap package recipe (packaging starting point).
+#
+# Tauri v2 (Rust + WebKitGTK) tray app. Snap has no general D-Bus plug like
+# Flatpak, so the interfaces below map each need to a snap interface:
+#   * Keyring (Secret Service) -> password-manager-service.
+#   * Tray (StatusNotifierItem) and idle (Mutter IdleMonitor / ScreenSaver)
+#     need session-bus access. desktop-legacy and unity7 cover the classic
+#     tray; Wayland covers the compositor. These are the usual friction points
+#     in Snap review.
+#
+# THIS RECIPE IS NOT YET VALIDATED. Building needs snapcraft (or the
+# snapcore multipass VM). Strict confinement for a tray app often needs a
+# store-review round, and some distros require `--dangerous` local install.
+# If strict confinement cannot reach the tray on a target system, fall back to
+# `confinement: classic`. See README, "Packaging status".
+name: trackfecta
+title: TrackFecta
+version: "1.0.0"
+summary: Unofficial Toggl Track desktop client for Linux
+description: |
+  TrackFecta is an unofficial, tray-first desktop client for Toggl Track on
+  Linux. It is not affiliated with, endorsed by, or sponsored by Toggl.
+  It talks to the public Toggl Track REST API with your own API token and
+  stores that token in the OS keyring.
+grade: stable
+# Strict confinement keeps the sandbox. If the tray or idle backend cannot
+# reach the session bus under strict, change this to `classic`.
+confinement: strict
+base: core24
+architectures:
+  - build-on: amd64
+  - build-on: arm64
+
+environment:
+  # WebKitGTK: disable the DMABUF renderer on systems where it crashes the
+  # GPU path inside the sandbox.
+  WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+
+apps:
+  trackfecta:
+    command: usr/bin/trackfecta
+    # The GNOME extension auto-detects the desktop entry by common-id.
+    common-id: com.trackfecta.app
+    extensions:
+      - gnome
+
+parts:
+  trackfecta:
+    plugin: nil
+    build-packages:
+      - curl
+      - file
+      - libwebkit2gtk-4.1-dev
+      - libayatana-appindicator3-dev
+      - librsvg2-dev
+      - patchelf
+      - pkg-config
+      - build-essential
+      - libssl-dev
+      - nodejs
+      - npm
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libayatana-appindicator3-1
+      - librsvg2-2
+    build-environment:
+      - CARGO_HOME: "$CRAFT_PART_BUILD/.cargo"
+      - RUSTUP_HOME: "$CRAFT_PART_BUILD/.rustup"
+    override-build: |
+      craftctl default
+      # Rust stable (minimal profile) into the part build dir.
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --profile minimal --default-toolchain stable
+      . "$CRAFT_PART_BUILD/.cargo/env"
+      # Build the frontend, then the Tauri .deb bundle. No updater artifacts:
+      # the Snap Store delivers updates.
+      npm ci
+      npm run tauri:build -- --bundles deb \
+        --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      # Unpack the .deb into the snap install tree.
+      mkdir -p "$CRAFT_PART_INSTALL"
+      ( cd src-tauri/target/release/bundle/deb && ar x ./*.deb )
+      tar -xf src-tauri/target/release/bundle/deb/data.tar.* \
+        -C "$CRAFT_PART_INSTALL"
+      # The deb binary is named after productName, not the crate. Rename it to
+      # the fixed name the app command uses.
+      ( cd "$CRAFT_PART_INSTALL/usr/bin" && mv "$(ls | head -n1)" trackfecta )
+      # Rename the desktop entry to the common-id so the launcher resolves it.
+      ( cd "$CRAFT_PART_INSTALL/usr/share/applications" \
+        && for d in ./*.desktop; do mv "$d" com.trackfecta.app.desktop; done )
+
+plugs:
+  # Secret Service for the API token.
+  password-manager-service:
+  # Tray (StatusNotifierItem) and idle (ScreenSaver / Mutter) over the session
+  # and system bus. These are the usual Snap review friction points.
+  desktop:
+  desktop-legacy:
+  unity7:
+  wayland:
+  x11:
+  opengl:
+  home:

@@ -2,9 +2,8 @@
 
 use keyring::Entry;
 
-const SERVICE: &str = "com.togglinux.app";
+const SERVICE: &str = "com.trackfecta.app";
 const USER: &str = "toggl_api_token";
-
 fn entry() -> Result<Entry, keyring::Error> {
     Entry::new(SERVICE, USER)
 }

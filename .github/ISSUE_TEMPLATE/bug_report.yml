@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for taking the time to file a bug report!
         For **security issues**, use the private form instead:
-        https://github.com/JayCodist/ToggLinux/security/advisories/new
+        https://github.com/JayCodist/trackfecta/security/advisories/new
   - type: textarea
     id: description
     attributes:
@@ -38,7 +38,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: ToggLinux version
+      label: TrackFecta version
       description: Shown in the About dialog / release tag (e.g. 1.0.0)
     validations:
       required: true
@@ -90,7 +90,7 @@ body:
       label: Relevant logs
       description: |
         Any output from the terminal, `journalctl --user -b`, or
-        `~/.local/share/com.togglinux.app/` if present.
+        `~/.local/share/com.trackfecta.app/` if present.
         **Please redact your Toggl API token before pasting.**
       render: shell
   - type: checkboxes

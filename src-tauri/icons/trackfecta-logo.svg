@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="512" height="512" role="img" aria-label="Stopwatch with shell prompt">
+  <rect width="200" height="200" rx="44" fill="transparent"/>
+  <g transform="translate(0 -3)">
+    <rect x="88" y="24" width="24" height="13" rx="4" fill="#dd3873"/>
+    <rect x="94" y="35" width="12" height="14" fill="#dd3873"/>
+    <g transform="rotate(46 100 116)"><rect x="93" y="36" width="14" height="12" rx="3" fill="#dd3873"/></g>
+    <circle cx="100" cy="116" r="66" fill="#dd3873"/>
+    <path d="M80 98 L106 116 L80 134" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M114 136 H136" stroke="#ffffff" stroke-width="13" stroke-linecap="round"/>
+  </g>
+</svg>

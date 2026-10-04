@@ -9,6 +9,7 @@ src-tauri/gen/
 # Env & secrets
 .env
 .env.*
+.secrets/
 
 # Editor / OS
 .vscode/

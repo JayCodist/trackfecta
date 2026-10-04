@@ -3,7 +3,7 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 
 fn main() {
-    let e = keyring::Entry::new("com.togglinux.app", "toggl_api_token").unwrap();
+    let e = keyring::Entry::new("com.trackfecta.app", "toggl_api_token").unwrap();
     match e.get_password() {
         Ok(t) => {
             let mut f = std::fs::OpenOptions::new()

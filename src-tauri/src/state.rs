@@ -167,34 +167,41 @@ pub struct TrayItems {
     pub quit: MenuItem<Wry>,
 }
 
+/// Builds the current snapshot: the entries and the today total from the
+/// cache, plus fresh budget numbers. Reading the cache is instant and uses
+/// no API requests. (sync::refresh sets a fallback total from live data
+/// when there is no cache.) broadcast() stores and emits the result;
+/// get_state() uses it directly at startup, before any broadcast has
+/// happened, so the UI shows cached data even during a quota block.
+pub fn snapshot(st: &AppState) -> TimerState {
+    let mut t = st.timer.lock().unwrap().clone();
+    if let Some(store) = st.store.as_ref() {
+        t.entries = store.entries_since(start_of_window(window_days(st.store.as_ref())));
+        let today = start_of_today();
+        t.today_seconds = t
+            .entries
+            .iter()
+            .filter(|r| r.stop.is_some() && r.start >= today)
+            .map(|r| r.duration.max(0.0) as i64)
+            .sum();
+    }
+    t.requests_left = st.budget.remaining();
+    t.blocked = !st.budget.until_blocked().is_zero();
+    t.next_sync_in = st.budget.until_refill().as_secs() as i64;
+    t.idle_backend = st.idle.lock().unwrap().backend.clone();
+    t
+}
+
 /// Sends the current timer snapshot to the UI and updates the tray text.
 pub fn broadcast(app: &AppHandle) {
     let snapshot = {
         let st = app.state::<AppState>();
-        {
-            let mut t = st.timer.lock().unwrap();
-            // The entries and the today total come from the cache. This is
-            // instant and uses no API requests. (sync::refresh sets a
-            // fallback total from live data when there is no cache.)
-            // Do the recompute on the stored state. The tray ticker reads
-            // today_seconds from it. An update of the snapshot only left the
-            // panel icon showing just the running elapsed time.
-            if let Some(store) = st.store.as_ref() {
-                t.entries = store.entries_since(start_of_window(window_days(st.store.as_ref())));
-                let today = start_of_today();
-                t.today_seconds = t
-                    .entries
-                    .iter()
-                    .filter(|r| r.stop.is_some() && r.start >= today)
-                    .map(|r| r.duration.max(0.0) as i64)
-                    .sum();
-            }
-            t.requests_left = st.budget.remaining();
-            t.blocked = !st.budget.until_blocked().is_zero();
-            t.next_sync_in = st.budget.until_refill().as_secs() as i64;
-            t.idle_backend = st.idle.lock().unwrap().backend.clone();
-            t.clone()
-        }
+        let snapshot = snapshot(&st);
+        // Store the recomputed snapshot too. The tray ticker reads
+        // today_seconds from the stored state. An update of the snapshot
+        // only left the panel icon showing just the running elapsed time.
+        *st.timer.lock().unwrap() = snapshot.clone();
+        snapshot
     };
     let _ = app.emit("timer-state", &snapshot);
     update_tray(app, &snapshot);
@@ -262,12 +269,7 @@ fn update_tray(app: &AppHandle, t: &TimerState) {
     let _ = items.status.set_text(&label);
     let _ = items.stop.set_enabled(t.running);
 
-    let last = app
-        .state::<AppState>()
-        .last_entry
-        .lock()
-        .unwrap()
-        .clone();
+    let last = app.state::<AppState>().last_entry.lock().unwrap().clone();
     let _ = items.resume.set_enabled(!t.running && last.is_some());
     if let Some(last) = last {
         let label = last.description.unwrap_or_else(|| "Untitled".into());

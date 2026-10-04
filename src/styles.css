@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ToggLinux design tokens. These mirror the official Toggl Track
+   TrackFecta design tokens. These mirror the official Toggl Track
    desktop app (light and dark).
    ============================================================ */
 :root {
@@ -551,6 +551,40 @@ body {
   margin: 0;
 }
 
+/* App-update banner in the About section. */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 2px 8px;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+}
+.update-main {
+  min-width: 0;
+}
+.update-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.update-notes {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.update-ctl {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
 /* ---------- tabs ---------- */
 .tabs {
   display: flex;
@@ -850,6 +884,39 @@ body {
 }
 .quota-dot.low {
   background: var(--accent);
+}
+/* Sync now, inline with the quota readout. Small ghost button. */
+.btn.sync {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-2);
+  border: 1px solid var(--border-2);
+}
+.btn.sync:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--muted);
+}
+.btn.sync:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.sync-ico {
+  display: inline-flex;
+}
+.sync-ico.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* The floating add-entry button. */
@@ -1158,6 +1225,44 @@ a.link:hover {
   justify-content: center;
   font-size: 24px;
   font-weight: 700;
+}
+
+/* ---------- startup loading ---------- */
+/* Shown while the saved token is verified against the API and the cache is
+   still empty. A returning user with cached entries sees the list at once
+   instead (cache-first). */
+.loading {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+}
+.loading-badge {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+.loading-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border-2);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+.loading-logo {
+  font-size: 18px;
+  line-height: 1;
+}
+.loading-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted-2);
 }
 
 /* ---------- toast ---------- */

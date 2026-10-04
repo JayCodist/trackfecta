@@ -1,6 +1,6 @@
-# Contributing to ToggLinux
+# Contributing to TrackFecta
 
-Thanks for your interest in improving ToggLinux. This document explains how to
+Thanks for your interest in improving TrackFecta. This document explains how to
 set up a development environment, how we work, and what a good pull request
 looks like. All contributions are licensed under the project's
 [MIT License](LICENSE). When you open a PR, you agree to that. There is no CLA.
@@ -26,8 +26,8 @@ interactions.
 - **Propose features** as enhancement issues. For anything larger than a quick
   fix, open the issue first and reach agreement before you write code.
 - **Pick up an issue.** Look for
-  [`good first issue`](https://github.com/JayCodist/ToggLinux/labels/good%20first%20issue)
-  or [`help wanted`](https://github.com/JayCodist/ToggLinux/labels/help%20wanted).
+  [`good first issue`](https://github.com/JayCodist/trackfecta/labels/good%20first%20issue)
+  or [`help wanted`](https://github.com/JayCodist/trackfecta/labels/help%20wanted).
   Say that you are taking the issue in the thread, so effort is not
   duplicated.
 - **Review and test** open PRs, improve the documentation and translations, or
@@ -46,8 +46,8 @@ interactions.
 4. Clone and install:
 
    ```bash
-   git clone https://github.com/JayCodist/ToggLinux.git
-   cd ToggLinux
+   git clone https://github.com/JayCodist/trackfecta.git
+   cd TrackFecta
    npm install
    ```
 

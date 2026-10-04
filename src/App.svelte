@@ -56,8 +56,19 @@
 
 {#if timer.status === "disconnected"}
   <Auth />
-{:else}
+{:else if timer.status === "connected" || timer.entries.length > 0}
   <Timer {timer} />
+{:else}
+  <!-- Startup loading: the token is being verified and there is nothing
+       cached to show yet. A returning user with cached entries skips this
+       and sees their data at once (cache-first). -->
+  <div class="loading" role="status" aria-live="polite">
+    <div class="loading-badge">
+      <span class="loading-ring" aria-hidden="true"></span>
+      <span class="loading-logo">⏱</span>
+    </div>
+    <p class="loading-text">Connecting…</p>
+  </div>
 {/if}
 
 {#if idle}

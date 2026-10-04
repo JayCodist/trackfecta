@@ -7,9 +7,7 @@ use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use thiserror::Error;
 
-use super::models::{
-    Client as ClientInfo, TimeEntry, UserInfo, WorkspaceProject, WorkspaceTag,
-};
+use super::models::{Client as ClientInfo, TimeEntry, UserInfo, WorkspaceProject, WorkspaceTag};
 use crate::budget::Budget;
 
 const BASE: &str = "https://api.track.toggl.com/api/v9";
@@ -35,7 +33,7 @@ pub struct TogglClient {
 impl TogglClient {
     pub fn new(token: &str, budget: Arc<Budget>) -> Self {
         let http = Client::builder()
-            .user_agent(concat!("ToggLinux/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("TrackFecta/", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("reqwest client");
         Self {
@@ -99,7 +97,7 @@ impl TogglClient {
                 "error",
                 &format!(
                     "bad response: {e}; body={}",
-                    &text.chars().take(400).collect::<String>()
+                    text.chars().take(400).collect::<String>()
                 ),
             );
             TogglError::Network(format!("bad response: {e}"))
@@ -181,10 +179,7 @@ impl TogglClient {
 
     /// `GET /workspaces/{id}/tags`: the tag list for a workspace. This feeds
     /// the tag picker. `/me/interests` was removed upstream and returns 404.
-    pub async fn workspace_tags(
-        &self,
-        workspace_id: i64,
-    ) -> Result<Vec<WorkspaceTag>, TogglError> {
+    pub async fn workspace_tags(&self, workspace_id: i64) -> Result<Vec<WorkspaceTag>, TogglError> {
         let resp = self
             .request(Method::GET, &format!("/workspaces/{workspace_id}/tags"))
             .send()
@@ -238,11 +233,7 @@ impl TogglClient {
     /// 200/204 is OK. A 404 also counts as success. The entry is already gone
     /// from the server, for example deleted in the web app first. Then the
     /// local deletion mark is correct.
-    pub async fn delete_entry(
-        &self,
-        workspace_id: i64,
-        entry_id: i64,
-    ) -> Result<(), TogglError> {
+    pub async fn delete_entry(&self, workspace_id: i64, entry_id: i64) -> Result<(), TogglError> {
         let resp = self
             .request(
                 Method::DELETE,

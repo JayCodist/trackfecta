@@ -2,9 +2,9 @@
 //! crash analysis. There is no crash-reporting service for this app. Logs
 //! stay local.
 //!
-//! Layout: `<app_data>/logs/togglinux.log` is always today's log. On the
+//! Layout: `<app_data>/logs/trackfecta.log` is always today's log. On the
 //! first write after midnight (UTC), the app renames it to
-//! `togglinux-YYYY-MM-DD.log` and starts a fresh file. Dated files older than
+//! `trackfecta-YYYY-MM-DD.log` and starts a fresh file. Dated files older than
 //! `RETENTION_DAYS` are deleted during the rename. A per-day line cap limits
 //! the worst case (a constant-error state with a raised hourly request cap)
 //! to about 1 MB per day, regardless of churn.
@@ -38,7 +38,7 @@ fn today() -> String {
 }
 
 fn current_file(dir: &Path) -> PathBuf {
-    dir.join("togglinux.log")
+    dir.join("trackfecta.log")
 }
 
 /// Opens the log, or rolls it over. setup calls this once, before anything
@@ -63,11 +63,11 @@ pub fn init(data_dir: &std::path::Path) {
     })));
     log(
         "info",
-        &format!("--- ToggLinux {} started ---", env!("CARGO_PKG_VERSION")),
+        &format!("--- TrackFecta {} started ---", env!("CARGO_PKG_VERSION")),
     );
 }
 
-/// Renames `togglinux.log` to its dated name when it belongs to an earlier
+/// Renames `trackfecta.log` to its dated name when it belongs to an earlier
 /// day, and deletes dated files past the retention window.
 fn rotate(dir: &Path, date: &str) {
     let cur = current_file(dir);
@@ -82,13 +82,12 @@ fn rotate(dir: &Path, date: &str) {
             })
             .unwrap_or_else(|| date.to_string());
         if mtime_day.as_str() < date {
-            let dated = dir.join(format!("togglinux-{mtime_day}.log"));
+            let dated = dir.join(format!("trackfecta-{mtime_day}.log"));
             if dated.exists() {
                 // The target of a previous rollover exists. Merge into it.
-                if let (Ok(mut old), Ok(content)) = (
-                    OpenOptions::new().append(true).open(&dated),
-                    fs::read(&cur),
-                ) {
+                if let (Ok(mut old), Ok(content)) =
+                    (OpenOptions::new().append(true).open(&dated), fs::read(&cur))
+                {
                     let _ = old.write_all(&content);
                     let _ = fs::remove_file(&cur);
                 }
@@ -100,17 +99,19 @@ fn rotate(dir: &Path, date: &str) {
     prune(dir, date);
 }
 
-/// Deletes `togglinux-YYYY-MM-DD.log` files older than the retention window.
+/// Deletes `trackfecta-YYYY-MM-DD.log` files older than the retention window.
 fn prune(dir: &Path, date: &str) {
     let cutoff = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
         .map(|d| d - chrono::Duration::days(RETENTION_DAYS));
     let Some(cutoff) = cutoff else { return };
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let Some(day) = name
-            .strip_prefix("togglinux-")
+            .strip_prefix("trackfecta-")
             .and_then(|s| s.strip_suffix(".log"))
         else {
             continue;

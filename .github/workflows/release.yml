@@ -15,7 +15,9 @@ jobs:
       matrix:
         include:
           # Build AppImage/deb/rpm on the oldest supported runner for maximum
-          # glibc compatibility across Ubuntu 22.04+.
+          # glibc compatibility across Ubuntu 22.04+. A single Linux build
+          # avoids asset-name collisions in the release (the bundles are not
+          # OS-versioned) and still runs on both 22.04 and 24.04.
           - platform: "ubuntu-22.04"
     runs-on: ${{ matrix.platform }}
     steps:
@@ -44,13 +46,36 @@ jobs:
         run: npm ci
 
       - name: Build and publish bundles
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The updater signs each bundle and writes a .sig. The action then
+          # publishes latest.json, which the in-app updater reads. The private
+          # key lives in repo secrets; the public key is in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
-          releaseName: "ToggLinux v__VERSION__"
-          releaseBody: "See the assets below to install ToggLinux on Linux. See CHANGELOG.md for details."
+          releaseName: "TrackFecta v__VERSION__"
+          releaseBody: |
+            TrackFecta is an unofficial Toggl Track desktop client for Linux.
+            It is not affiliated with or endorsed by Toggl.
+
+            Pick the asset that matches your system (all are x86_64):
+
+            - **Ubuntu / Debian:** the `.deb` asset.
+              `sudo apt install ./TrackFecta_*_amd64.deb`
+            - **Fedora / openSUSE / RHEL:** the `.rpm` asset.
+              `sudo rpm -Uvh trackfecta-*.x86_64.rpm`
+            - **Any Linux (self-contained):** the `.AppImage` asset.
+              `chmod +x TrackFecta_*.AppImage` and run it. The AppImage also
+              updates itself in app from Settings.
+
+            GNOME users need the AppIndicator extension for the tray icon.
+            See the README for setup and the Wayland hotkey note.
           releaseDraft: true
           prerelease: false
-          args: ""
+          generateReleaseNotes: true
+          # Enable updater artifacts only in CI. Local `npm run tauri:build`
+          # stays keyless because the committed config leaves this off.
+          args: '--config {"bundle":{"createUpdaterArtifacts":true}}'
