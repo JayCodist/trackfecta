@@ -230,11 +230,7 @@
     <div class="set-group">
       <div class="set-row">
         <div class="set-main">
-          <div class="set-label">Theme</div>
-          <div class="set-hint">
-            Follows your system preference by default; choose light or dark to
-            pin it.
-          </div>
+          <div class="set-label">Dark Mode</div>
         </div>
         <div class="set-ctl">
           <Dropdown
@@ -244,7 +240,7 @@
               { value: "dark", label: "Dark" },
             ]}
             value={theme}
-            placeholder="Theme"
+            placeholder="Dark mode"
             icon=""
             onChange={(v) => saveTheme(v)}
           />
@@ -287,18 +283,6 @@
             placeholder="No project"
             onChange={(v) => saveDefaultProject(v ? Number(v) : null)}
           />
-        </div>
-      </div>
-      <div class="set-row">
-        <div class="set-main">
-          <div class="set-label">Background sync</div>
-          <div class="set-hint">
-            Polls Toggl while the window is closed. Every request counts
-            against your hourly cap.
-          </div>
-        </div>
-        <div class="set-ctl">
-          <span class="muted" style="font-size:12px">opportunistic</span>
         </div>
       </div>
     </div>

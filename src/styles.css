@@ -297,16 +297,6 @@ body {
 .dd-btn.open .dd-caret {
   transform: rotate(0deg);
 }
-/* Open upward or leftward, so the menu never leaves the window edge. */
-.dd-pop {
-  position: fixed;
-  top: auto;
-  left: auto;
-  min-width: 200px;
-}
-.dd-pop .pop-list {
-  max-height: 240px;
-}
 /* The project chip: colored name and dot, muted client. Like the Toggl web
    app. */
 .proj-chip {
@@ -381,6 +371,17 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow-pop);
   padding: 6px;
+}
+/* The shared dropdown uses fixed positioning, so it escapes the scrolling
+   entries list. Must come after `.pop` to win the cascade. */
+.dd-pop {
+  position: fixed;
+  top: auto;
+  left: auto;
+  min-width: 200px;
+}
+.dd-pop .pop-list {
+  max-height: 240px;
 }
 .pop-title {
   font-size: 11px;

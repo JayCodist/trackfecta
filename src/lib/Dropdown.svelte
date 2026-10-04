@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import Icons from "./Icons.svelte";
 
   /** One dropdown option. The value "" is the sentinel for "none" or
@@ -27,21 +28,32 @@
 
   let open = $state(false);
   let btn: HTMLButtonElement | undefined = $state();
+  let pop: HTMLDivElement | undefined = $state();
   let popStyle = $state("");
   const selected = $derived(options.find((o) => o.value === value) ?? null);
 
   /** Fixed positioning. The dropdowns are inside scrolling lists. An
    * absolutely-positioned popover there would be cut off by the scroller. */
-  function toggle() {
+  async function toggle() {
     open = !open;
     if (!open || !btn) return;
     const r = btn.getBoundingClientRect();
     const roomBelow = window.innerHeight - r.bottom;
     const minW = Math.max(r.width, 200);
-    if (roomBelow > 260 || roomBelow >= r.top) {
-      popStyle = `left:${r.left}px;top:${r.bottom + 4}px;min-width:${minW}px;max-height:${Math.min(300, roomBelow - 12)}px`;
-    } else {
-      popStyle = `left:${r.left}px;bottom:${window.innerHeight - r.top + 4}px;min-width:${minW}px;max-height:${Math.min(300, r.top - 12)}px`;
+    const vertical =
+      roomBelow > 260 || roomBelow >= r.top
+        ? `top:${r.bottom + 4}px;max-height:${Math.min(300, roomBelow - 12)}px`
+        : `bottom:${window.innerHeight - r.top + 4}px;max-height:${Math.min(300, r.top - 12)}px`;
+    popStyle = `left:${r.left}px;${vertical};min-width:${minW}px`;
+    // The menu is wider than the chip that opens it, and the Settings
+    // controls hug the right edge. Measure once rendered, then slide it
+    // back inside the window.
+    await tick();
+    if (!pop) return;
+    const w = pop.getBoundingClientRect().width;
+    const left = Math.min(r.left, Math.max(8, window.innerWidth - 8 - w));
+    if (left !== r.left) {
+      popStyle = popStyle.replace(/left:[\d.]+px/, `left:${left}px`);
     }
   }
 
@@ -72,7 +84,7 @@
     <span class="dd-caret"><Icons name="chevron" size={12} /></span>
   </button>
   {#if open}
-    <div class="pop dd-pop" style={popStyle}>
+    <div class="pop dd-pop" bind:this={pop} style={popStyle}>
       <div class="pop-list">
         {#each options as o (o.value)}
           <button class="pop-item" type="button" onclick={() => pick(o.value)}>
