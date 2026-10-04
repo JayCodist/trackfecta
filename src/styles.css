@@ -1042,6 +1042,51 @@ a.link:hover {
   margin: 2px 2px 0;
 }
 
+/* Shortcut recorder. Shows the accelerator as key chips, wrapping onto
+   extra lines when the combination is long. */
+.hotkey-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  row-gap: 6px;
+  min-width: 120px;
+  max-width: 190px;
+  min-height: 20px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: var(--bg);
+  outline: none;
+  cursor: text;
+}
+.hotkey-box:focus {
+  border-color: var(--accent);
+}
+.hotkey-box kbd {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 7px;
+  border: 1px solid var(--border-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.hotkey-sep {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 -1px;
+}
+.hotkey-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* The toggle switch. */
 .switch {
   position: relative;

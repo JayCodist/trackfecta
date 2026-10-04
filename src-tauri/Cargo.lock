@@ -2578,32 +2578,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pangocairo"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57036589a9cfcacf83f9e606d15813fc6bf03f0e9e69aa2b5e3bb85af86b38a5"
-dependencies = [
- "cairo-rs",
- "glib",
- "libc",
- "pango",
- "pangocairo-sys",
-]
-
-[[package]]
-name = "pangocairo-sys"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc3c8ff676a37e7a72ec1d5fc029f91c407278083d2752784ff9f5188c108833"
-dependencies = [
- "cairo-sys-rs",
- "glib-sys",
- "libc",
- "pango-sys",
- "system-deps",
-]
-
-[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4173,11 +4147,8 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 name = "togglinux"
 version = "1.0.0"
 dependencies = [
- "cairo-rs",
  "chrono",
  "keyring",
- "pango",
- "pangocairo",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
@@ -4189,6 +4160,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "thiserror 2.0.20",
  "tokio",
+ "zbus",
 ]
 
 [[package]]

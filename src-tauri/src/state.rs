@@ -43,6 +43,15 @@ pub struct TimerState {
     /// Requests left in the current rolling hour. The free plan allows about
     /// 30 per hour.
     pub requests_left: usize,
+    /// True while a server quota block (402 or 429) is active. All sync is
+    /// paused until `next_sync_in` elapses.
+    pub blocked: bool,
+    /// Seconds until the next request can go out: the longer of our window
+    /// refill and the server block. Zero when nothing is waiting.
+    pub next_sync_in: i64,
+    /// The idle-detection backend in use: gnome, kde, or none. The Settings
+    /// screen shows it. See idle.rs.
+    pub idle_backend: String,
 }
 
 impl Default for TimerState {
@@ -55,8 +64,32 @@ impl Default for TimerState {
             status: ConnStatus::Verifying,
             entries: Vec::new(),
             requests_left: 0,
+            blocked: false,
+            next_sync_in: 0,
+            idle_backend: String::new(),
         }
     }
+}
+
+/// An idle period that just ended while a timer ran. The UI asks the user
+/// to keep, discard, or split it. Unix seconds.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingIdle {
+    pub idle_start: i64,
+    pub idle_end: i64,
+    pub idle_seconds: i64,
+    /// The running entry description, for the dialog text.
+    pub running_description: Option<String>,
+}
+
+/// Idle-monitor state shared between the monitor thread and the commands.
+pub struct IdleState {
+    /// The prompt waiting for the user's answer. The thread sets it, a
+    /// command clears it when the user answers.
+    pub pending: Option<PendingIdle>,
+    /// The backend the monitor thread detected: gnome, kde, or none.
+    pub backend: String,
 }
 
 pub struct Session {
@@ -100,6 +133,8 @@ pub struct AppState {
     /// second one. Without this guard, a focus wakeup during the startup
     /// connect made every connect-time request fire twice.
     pub connecting: Arc<std::sync::atomic::AtomicBool>,
+    /// Idle-monitor state. See idle.rs.
+    pub idle: Mutex<IdleState>,
 }
 
 impl AppState {
@@ -114,6 +149,10 @@ impl AppState {
             store,
             budget: Arc::new(Budget::new()),
             connecting: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            idle: Mutex::new(IdleState {
+                pending: None,
+                backend: "none".into(),
+            }),
         }
     }
 }
@@ -151,6 +190,9 @@ pub fn broadcast(app: &AppHandle) {
                     .sum();
             }
             t.requests_left = st.budget.remaining();
+            t.blocked = !st.budget.until_blocked().is_zero();
+            t.next_sync_in = st.budget.until_refill().as_secs() as i64;
+            t.idle_backend = st.idle.lock().unwrap().backend.clone();
             t.clone()
         }
     };
@@ -245,6 +287,8 @@ pub fn mark_disconnected(app: &AppHandle) {
         t.started_at = None;
         *st.session.lock().unwrap() = None;
         *st.entry_id.lock().unwrap() = None;
+        // An unanswered idle prompt is meaningless without a session.
+        st.idle.lock().unwrap().pending = None;
     }
     broadcast(app);
 }

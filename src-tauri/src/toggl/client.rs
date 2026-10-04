@@ -69,6 +69,16 @@ impl TogglClient {
                 .unwrap_or(5);
             return Err(TogglError::RateLimited { retry_after });
         }
+        if status.as_u16() == 402 {
+            // Toggl reports the hourly quota with 402, not 429. The body
+            // states the reset time: "Your quota will reset in N seconds."
+            // Treat it as a rate limit with that delay. The full window is
+            // the fallback when the text changes.
+            let body = resp.text().await.unwrap_or_default();
+            crate::logger::log("error", &format!("API {status}: {body}"));
+            let retry_after = Self::parse_reset_secs(&body).unwrap_or(3600);
+            return Err(TogglError::RateLimited { retry_after });
+        }
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             crate::logger::log("error", &format!("API {status}: {body}"));
@@ -94,6 +104,16 @@ impl TogglClient {
             );
             TogglError::Network(format!("bad response: {e}"))
         })
+    }
+
+    /// Pulls N out of "Your quota will reset in N seconds." Returns None
+    /// when the text does not match.
+    fn parse_reset_secs(body: &str) -> Option<u64> {
+        let marker = "reset in ";
+        let start = body.find(marker)? + marker.len();
+        let rest = &body[start..];
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        digits.parse().ok()
     }
 
     /// `GET /me`. Validates the token and finds the default workspace.

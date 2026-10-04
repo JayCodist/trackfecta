@@ -5,7 +5,7 @@
     enable as enableAutostart,
     isEnabled,
   } from "@tauri-apps/plugin-autostart";
-  import { projectColor, applyTheme, dotColor, type ProjectOption, type TimerState } from "./timer";
+  import { projectColor, applyTheme, dotColor, fmtWait, type ProjectOption, type TimerState } from "./timer";
   import Dropdown, { type DropdownOption } from "./Dropdown.svelte";
 
   let { projects, timer }: { projects: ProjectOption[]; timer: TimerState } =
@@ -19,6 +19,28 @@
 
   let theme = $state("system");
   let traySeconds = $state(false);
+
+  let idleEnabled = $state(true);
+  let idleMin = $state("5");
+
+  let stopOnSleep = $state(true);
+
+  let hotkey = $state("CommandOrControl+Alt+D");
+  let hotkeyEnabled = $state(true);
+  let wayland = $state(false);
+  // What the recorder box shows. The load effect sets it from the saved
+  // value. Empty means "listening": the next key combination replaces it.
+  // Escape puts the saved value back.
+  let recHotkey = $state("CommandOrControl+Alt+D");
+  // The detected idle backend, from the last timer-state broadcast. gnome,
+  // kde, or none. Passed in by the parent through the timer prop.
+  const idleBackend = $derived(
+    timer.idleBackend === "gnome"
+      ? "GNOME"
+      : timer.idleBackend === "kde"
+        ? "KDE"
+        : "none",
+  );
 
   let tokenDraft = $state("");
   let tokenBusy = $state(false);
@@ -56,6 +78,12 @@
       defaultProjectId: number | null;
       theme: string;
       trayShowSeconds: boolean;
+      stopOnSleep: boolean;
+      idleEnabled: boolean;
+      idleThresholdMin: number;
+      hotkey: string;
+      hotkeyEnabled: boolean;
+      wayland: boolean;
     }>("get_settings")
       .then((s) => {
         capDraft = String(s.hourlyCap);
@@ -63,6 +91,13 @@
         defaultProjectId = s.defaultProjectId;
         theme = s.theme ?? "system";
         traySeconds = s.trayShowSeconds ?? false;
+        stopOnSleep = s.stopOnSleep ?? true;
+        idleEnabled = s.idleEnabled ?? true;
+        idleMin = String(s.idleThresholdMin ?? 5);
+        hotkey = s.hotkey ?? "CommandOrControl+Alt+D";
+        recHotkey = hotkey;
+        hotkeyEnabled = s.hotkeyEnabled ?? true;
+        wayland = s.wayland ?? false;
       })
       .catch(() => {});
     isEnabled()
@@ -144,6 +179,197 @@
         : "Tray icon shows hours and minutes.";
     } catch (e) {
       traySeconds = !traySeconds;
+      error = String(e);
+    }
+  }
+
+  async function toggleIdle() {
+    idleEnabled = !idleEnabled;
+    try {
+      await invoke("set_setting", {
+        key: "idle_enabled",
+        value: idleEnabled ? "true" : "false",
+      });
+    } catch (e) {
+      idleEnabled = !idleEnabled;
+      error = String(e);
+    }
+  }
+
+  async function toggleStopOnSleep() {
+    stopOnSleep = !stopOnSleep;
+    try {
+      await invoke("set_setting", {
+        key: "stop_on_sleep",
+        value: stopOnSleep ? "true" : "false",
+      });
+    } catch (e) {
+      stopOnSleep = !stopOnSleep;
+      error = String(e);
+    }
+  }
+
+  async function saveIdleMin() {
+    const n = Number(idleMin);
+    if (!Number.isFinite(n) || n < 1 || n > 240) {
+      error = "Threshold must be 1 to 240 minutes.";
+      return;
+    }
+    error = null;
+    try {
+      await invoke("set_setting", { key: "idle_threshold_min", value: idleMin });
+      note = "Idle threshold saved.";
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function saveHotkey() {
+    const accel = recHotkey.trim();
+    if (!accel) {
+      error = "Press a key combination first.";
+      return;
+    }
+    error = null;
+    try {
+      await invoke("set_setting", { key: "hotkey", value: accel });
+      hotkey = accel;
+      note = "Shortcut saved.";
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  /** Turns a KeyboardEvent into the accelerator grammar the Rust side
+   * parses (global-hotkey crate): CommandOrControl+Alt+Shift+Super+Key.
+   * e.code values (KeyD, Digit3, F5) match the parser directly. */
+  function accelFromEvent(e: KeyboardEvent): string | null {
+    const key = e.code;
+    // Modifier-only presses are not a complete shortcut. Keep listening.
+    if (
+      key === "ShiftLeft" || key === "ShiftRight" ||
+      key === "ControlLeft" || key === "ControlRight" ||
+      key === "AltLeft" || key === "AltRight" ||
+      key === "MetaLeft" || key === "MetaRight" ||
+      key === "OS"
+    ) {
+      return null;
+    }
+    const parts: string[] = [];
+    if (e.ctrlKey || e.metaKey) parts.push("CommandOrControl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    if (e.metaKey && !e.ctrlKey) parts.push("Super");
+    // A shortcut needs a modifier. A bare key grabs every keypress.
+    if (parts.length === 0) return null;
+    parts.push(key);
+    return parts.join("+");
+  }
+
+  function recordHotkey(e: KeyboardEvent) {
+    e.preventDefault();
+    if (e.key === "Escape") {
+      recHotkey = hotkey;
+      (e.target as HTMLElement).blur();
+      return;
+    }
+    const accel = accelFromEvent(e);
+    if (accel) recHotkey = accel;
+  }
+
+  // Platform for display only. The stored accelerator keeps the portable
+  // CommandOrControl token; global-hotkey resolves it to Cmd on macOS and
+  // Ctrl everywhere else, so the box shows the key this machine uses.
+  const platform = $derived.by(() => {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    if (/Mac|iPhone|iPad/i.test(ua)) return "mac";
+    if (/Windows/i.test(ua)) return "windows";
+    return "linux";
+  });
+
+  const specialKeys: Record<string, string> = {
+    Space: "Space",
+    Enter: "Enter",
+    Tab: "Tab",
+    Escape: "Esc",
+    Backspace: "Backspace",
+    Delete: "Del",
+    Insert: "Ins",
+    ArrowUp: "\u2191",
+    ArrowDown: "\u2193",
+    ArrowLeft: "\u2190",
+    ArrowRight: "\u2192",
+    Home: "Home",
+    End: "End",
+    PageUp: "PgUp",
+    PageDown: "PgDn",
+    Comma: ",",
+    Period: ".",
+    Slash: "/",
+    Semicolon: ";",
+    Quote: "\u2019",
+    Backquote: "`",
+    Minus: "-",
+    Equal: "=",
+    Plus: "+",
+    BracketLeft: "[",
+    BracketRight: "]",
+    Backslash: "\\",
+    CapsLock: "Caps",
+    PrintScreen: "PrtSc",
+    ScrollLock: "Scroll",
+    NumLock: "Num",
+    ContextMenu: "Menu",
+  };
+
+  /** One accelerator token (CommandOrControl, KeyD, F5…) as a readable label. */
+  function keyLabel(part: string): string {
+    switch (part) {
+      case "CommandOrControl":
+        return platform === "mac" ? "\u2318 Cmd" : "Ctrl";
+      case "Command":
+      case "Cmd":
+        return "\u2318 Cmd";
+      case "Control":
+        return platform === "mac" ? "\u2303 Control" : "Ctrl";
+      case "Alt":
+        return platform === "mac" ? "\u2325 Option" : "Alt";
+      case "Shift":
+        return platform === "mac" ? "\u21e7 Shift" : "Shift";
+      case "Super":
+      case "Meta":
+      case "OS":
+        return platform === "mac"
+          ? "\u2318 Cmd"
+          : platform === "windows"
+            ? "\u229e Win"
+            : "Super";
+    }
+    if (/^Key[A-Z]$/.test(part)) return part.slice(3);
+    if (/^Digit\d$/.test(part)) return part.slice(5);
+    if (specialKeys[part]) return specialKeys[part];
+    return part; // F5, Numpad5, etc. are already readable
+  }
+
+  // The accelerator shown in the recorder box, one label per key chip.
+  const hotkeyParts = $derived(
+    recHotkey
+      ? recHotkey
+          .split("+")
+          .filter(Boolean)
+          .map(keyLabel)
+      : [],
+  );
+
+  async function toggleHotkey() {
+    hotkeyEnabled = !hotkeyEnabled;
+    try {
+      await invoke("set_setting", {
+        key: "hotkey_enabled",
+        value: hotkeyEnabled ? "true" : "false",
+      });
+    } catch (e) {
+      hotkeyEnabled = !hotkeyEnabled;
       error = String(e);
     }
   }
@@ -285,6 +511,132 @@
           />
         </div>
       </div>
+      <div class="set-row">
+        <div class="set-main">
+          <div class="set-label">Idle detection</div>
+          <div class="set-hint">
+            When a timer runs and you step away, ask what to do with the idle
+            time when you return
+            {idleBackend}.
+          </div>
+        </div>
+        <div class="set-ctl">
+          <button
+            class="switch"
+            class:on={idleEnabled}
+            role="switch"
+            aria-checked={idleEnabled}
+            aria-label="Idle detection"
+            onclick={toggleIdle}
+          ></button>
+        </div>
+      </div>
+      {#if idleEnabled}
+        <div class="set-row">
+          <div class="set-main">
+            <div class="set-label">Idle threshold</div>
+            <div class="set-hint">
+              How many minutes away start an idle period?
+            </div>
+          </div>
+          <div class="set-ctl">
+            <input
+              class="input"
+              type="number"
+              min="1"
+              max="240"
+              bind:value={idleMin}
+              style="width:76px"
+            />
+            <button class="btn ghost" onclick={saveIdleMin}>Save</button>
+          </div>
+        </div>
+      {/if}
+      <div class="set-row">
+        <div class="set-main">
+          <div class="set-label">Stop on sleep</div>
+          <div class="set-hint">
+            Stop a running timer when the machine sleeps or shuts down
+          </div>
+        </div>
+        <div class="set-ctl">
+          <button
+            class="switch"
+            class:on={stopOnSleep}
+            role="switch"
+            aria-checked={stopOnSleep}
+            aria-label="Stop on sleep"
+            onclick={toggleStopOnSleep}
+          ></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3 class="set-title">Keyboard</h3>
+    <div class="set-group">
+      <div class="set-row">
+        <div class="set-main">
+          <div class="set-label">Global shortcut</div>
+          <div class="set-hint">
+            Starts or stops the timer from anywhere. Press the keys in the
+            box to record a new shortcut.
+            {#if wayland}
+              Global shortcuts need an X11 session. On Wayland, GNOME can
+              bind the same keys for you: open Settings app, Keyboard, View
+              and Customize Shortcuts, Custom Shortcuts, and add a command
+              for <code>togglinux</code> with your chosen shortcut. In the
+              window, Ctrl+D always works.
+            {/if}
+          </div>
+        </div>
+        <div class="set-ctl">
+          <div
+            class="hotkey-box"
+            tabindex="0"
+            role="textbox"
+            aria-label="Global shortcut"
+            onkeydown={recordHotkey}
+            onfocus={() => (recHotkey = "")}
+            onblur={() => {
+              if (!recHotkey) recHotkey = hotkey;
+            }}
+          >
+            {#if !recHotkey}
+              <span class="hotkey-hint">Press a shortcut…</span>
+            {:else}
+              {#each hotkeyParts as label, i}
+                {#if i > 0}<span class="hotkey-sep">,</span>{/if}
+                <kbd>{label}</kbd>
+              {/each}
+            {/if}
+          </div>
+          <button
+            class="btn ghost"
+            disabled={!recHotkey || recHotkey === hotkey}
+            onclick={saveHotkey}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+      <div class="set-row">
+        <div class="set-main">
+          <div class="set-label">Global shortcut enabled</div>
+          <div class="set-hint">Turns the shortcut on or off.</div>
+        </div>
+        <div class="set-ctl">
+          <button
+            class="switch"
+            class:on={hotkeyEnabled}
+            role="switch"
+            aria-checked={hotkeyEnabled}
+            aria-label="Global shortcut enabled"
+            onclick={toggleHotkey}
+          ></button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -305,6 +657,9 @@
               class:low={timer.status === "connected" && timer.requestsLeft <= 3}
             ></span>
             {timer.requestsLeft} left this hour (of {savedCap})
+            {#if timer.blocked}
+              · next sync in {fmtWait(timer.nextSyncIn)}
+            {/if}
           </div>
         </div>
         <div class="set-ctl">

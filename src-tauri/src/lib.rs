@@ -1,5 +1,7 @@
 mod budget;
+mod idle;
 mod logger;
+mod power;
 mod secrets;
 mod state;
 mod store;
@@ -15,7 +17,7 @@ use tauri::{
     AppHandle, Emitter, Manager, WebviewWindow, Wry,
 };
 
-use state::{broadcast, mark_disconnected, AppState, LastEntry, Session, TimerState, TrayItems};
+use state::{broadcast, mark_disconnected, AppState, LastEntry, TimerState, TrayItems};
 use store::{EntryRow, PickerProject};
 
 // ---------- commands ----------
@@ -26,6 +28,14 @@ use store::{EntryRow, PickerProject};
 #[tauri::command]
 fn get_state(state: tauri::State<'_, AppState>) -> TimerState {
     state.timer.lock().unwrap().clone()
+}
+
+/// Gives an idle prompt that is waiting for an answer. The UI calls this on
+/// mount, the same guard as get_state: the event can arrive before the
+/// listener exists.
+#[tauri::command]
+fn get_idle_pending(state: tauri::State<'_, AppState>) -> Option<state::PendingIdle> {
+    state.idle.lock().unwrap().pending.clone()
 }
 
 #[tauri::command]
@@ -162,6 +172,20 @@ struct AppSettings {
     theme: String,
     /// Whether the tray time readout includes seconds.
     tray_show_seconds: bool,
+    /// Stop a running timer when the machine sleeps or shuts down. On by
+    /// default, like the official desktop clients.
+    stop_on_sleep: bool,
+    /// Whether the idle prompt is on. On by default.
+    idle_enabled: bool,
+    /// Idle threshold in minutes. Default 5, to match Toggl.
+    idle_threshold_min: i64,
+    /// The global shortcut accelerator, such as CommandOrControl+Alt+D.
+    hotkey: String,
+    /// Whether the global shortcut is on. On by default.
+    hotkey_enabled: bool,
+    /// True on a Wayland session. Global shortcuts need X11, so the
+    /// Settings screen shows setup steps instead of the input.
+    wayland: bool,
 }
 
 #[tauri::command]
@@ -189,12 +213,48 @@ fn get_settings(app: tauri::AppHandle<Wry>) -> AppSettings {
         .and_then(|s| s.get_setting("tray_show_seconds"))
         .map(|v| v == "true")
         .unwrap_or(false);
+    let stop_on_sleep = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("stop_on_sleep"))
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    let idle_enabled = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("idle_enabled"))
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    let idle_threshold_min = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("idle_threshold_min"))
+        .and_then(|v| v.parse().ok())
+        .filter(|m: &i64| (1..=240).contains(m))
+        .unwrap_or(5);
+    let hotkey = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("hotkey"))
+        .unwrap_or_else(|| DEFAULT_HOTKEY.to_string());
+    let hotkey_enabled = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("hotkey_enabled"))
+        .map(|v| v != "false")
+        .unwrap_or(true);
     AppSettings {
         hourly_cap: st.budget.max(),
         default_project_id,
         default_project_name,
         theme,
         tray_show_seconds,
+        stop_on_sleep,
+        idle_enabled,
+        idle_threshold_min,
+        hotkey,
+        hotkey_enabled,
+        wayland: is_wayland(),
     }
 }
 
@@ -234,6 +294,15 @@ fn set_setting(
     if key == "tray_show_seconds" {
         // Draw the tray icon again with the new format.
         tray::refresh(&app);
+    }
+    if key == "hotkey" || key == "hotkey_enabled" {
+        // Apply the new shortcut right away. A failure, such as any
+        // registration on Wayland, becomes a toast instead of an error: the
+        // setting is still saved for when the user returns to an X11
+        // session.
+        if let Err(e) = apply_hotkey(&app) {
+            state::emit_toast(&app, &e);
+        }
     }
     // The requests-left number can change with the new cap.
     broadcast(&app);
@@ -302,13 +371,7 @@ fn create_entry(
     billable: bool,
 ) -> Result<(), String> {
     let st = app.state::<AppState>();
-    let workspace_id = {
-        let guard = st.session.lock().unwrap();
-        guard
-            .as_ref()
-            .map(|s| s.user.default_workspace_id)
-            .ok_or("not connected")?
-    };
+    let workspace_id = require_workspace(&app)?;
     let temp_id = -chrono::Utc::now().timestamp_micros();
     if let Some(store) = st.store.as_ref() {
         let entry = toggl::TimeEntry {
@@ -333,7 +396,192 @@ fn create_entry(
     Ok(())
 }
 
+/// Answers the idle dialog. The three actions match Toggl desktop:
+///   * keep: do nothing. The idle time stays inside the running entry.
+///   * discard: stop the entry at the start of the idle period. The idle
+///     time and the time after it are not tracked, and the timer stops.
+///   * split: stop the entry at the start of the idle period, and start a
+///     new entry with the same fields at the moment activity returned.
+///     The idle time is excluded and tracking continues.
+#[tauri::command]
+fn resolve_idle(app: tauri::AppHandle<Wry>, action: String) -> Result<(), String> {
+    let st = app.state::<AppState>();
+    let Some(pending) = st.idle.lock().unwrap().pending.take() else {
+        // Nothing to answer. The dialog can be open only with a pending
+        // prompt, so this is a double-click guard.
+        return Ok(());
+    };
+    if action == "keep" {
+        broadcast(&app);
+        return Ok(());
+    }
+    if action != "discard" && action != "split" {
+        return Err("unknown idle action".into());
+    }
+    let Some(store) = st.store.as_ref() else {
+        return Err("cache unavailable".into());
+    };
+    let Some(row) = store.open_entry() else {
+        // The timer stopped while the dialog was open. Nothing to fix.
+        return Ok(());
+    };
+    // The idle boundary must fall inside the entry. A clock that disagrees
+    // (a bad backend value) is answered like "keep" rather than corrupting
+    // the row.
+    if pending.idle_start <= row.start {
+        return Ok(());
+    }
+    // Stop the running row at the start of the idle period. dirty=1 puts
+    // the PUT in the queue like any other local edit.
+    store.stop_local(row.id, pending.idle_start);
+    if action == "discard" {
+        let mut t = st.timer.lock().unwrap();
+        t.running = false;
+        t.description = None;
+        t.started_at = None;
+        *st.entry_id.lock().unwrap() = None;
+    } else {
+        // Split: a new running entry from the moment of activity, with the
+        // same description, project, tags, and billable flag.
+        let now = chrono::Utc::now();
+        let temp_id = -now.timestamp_micros();
+        let entry = toggl::TimeEntry {
+            id: temp_id,
+            workspace_id: row.workspace_id,
+            description: row.description.clone(),
+            start: chrono::DateTime::<chrono::Utc>::from_timestamp(pending.idle_end, 0)
+                .unwrap_or_else(chrono::Utc::now),
+            stop: None,
+            duration: 0.0,
+            project_id: row.project_id,
+            tags: Some(row.tags.clone()),
+            billable: Some(row.billable),
+            updated_at: None,
+            deleted: None,
+            server_deleted_at: None,
+        };
+        store.insert_manual(&entry);
+        // The timer keeps running, counted from the return of activity.
+        let mut t = st.timer.lock().unwrap();
+        t.started_at = Some(pending.idle_end.to_string());
+        *st.entry_id.lock().unwrap() = None;
+    }
+    drop(st);
+    broadcast(&app);
+    app.state::<AppState>().wakeup.notify_one();
+    Ok(())
+}
+
+// ---------- hotkeys ----------
+
+/// The default global shortcut. Alt keeps it clear of browser and editor
+/// bindings, and of the app-local Ctrl+D.
+pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Alt+D";
+
+/// True on a Wayland session. The global-hotkey backend needs X11; there
+/// is no Wayland protocol for grabbing keys.
+fn is_wayland() -> bool {
+    std::env::var("XDG_SESSION_TYPE")
+        .map(|v| v == "wayland")
+        .unwrap_or(false)
+        || std::env::var("WAYLAND_DISPLAY").is_ok()
+}
+
+/// Re-registers the global shortcut from the current settings. Unregisters
+/// everything first, so a changed accelerator cannot leave the old one
+/// live. Returns Err with a user-facing note when registration fails.
+fn apply_hotkey(app: &AppHandle<Wry>) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    let st = app.state::<AppState>();
+    let enabled = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("hotkey_enabled"))
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    let accel = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("hotkey"))
+        .unwrap_or_else(|| DEFAULT_HOTKEY.to_string());
+    drop(st);
+    let gs = app.global_shortcut();
+    // Always clear first. unregister_all is safe with nothing registered.
+    gs.unregister_all().map_err(|e| e.to_string())?;
+    if !enabled {
+        return Ok(());
+    }
+    gs.on_shortcut(accel.as_str(), |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            toggle_timer(_app);
+        }
+    })
+    .map_err(|e| {
+        crate::logger::log(
+            "warn",
+            &format!("hotkey: register '{accel}' failed: {e}"),
+        );
+        if is_wayland() {
+            // Expected on Wayland. Point at the shell-level alternative.
+            format!("Global shortcut needs X11. On Wayland, add a custom keybinding for {accel} in the shell, or use Ctrl+D in the window.")
+        } else {
+            format!("Could not register {accel}: {e}")
+        }
+    })?;
+    crate::logger::log("info", &format!("hotkey: registered {accel}"));
+    Ok(())
+}
+
+/// Starts or stops the timer. Used by the global shortcut. A start reuses
+/// the last entry's fields, or starts an empty entry.
+fn toggle_timer(app: &AppHandle<Wry>) {
+    let running = app.state::<AppState>().timer.lock().unwrap().running;
+    if running {
+        let _ = do_stop(app);
+        return;
+    }
+    let last = app.state::<AppState>().last_entry.lock().unwrap().clone();
+    let payload = match last {
+        Some(l) => StartPayload {
+            description: l.description.unwrap_or_default(),
+            project_id: l.project_id,
+            tags: l.tags,
+            billable: l.billable,
+        },
+        None => StartPayload {
+            description: String::new(),
+            project_id: None,
+            tags: Vec::new(),
+            billable: false,
+        },
+    };
+    let _ = do_start(app, payload);
+}
+
 // ---------- core operations (shared by the tray and the commands) ----------
+
+/// The default workspace id for the active session. Start and the manual
+/// create need it. When there is no session, the message explains why:
+/// a quota block reports the wait until the next sync
+fn require_workspace(app: &AppHandle<Wry>) -> Result<i64, String> {
+    let wid = {
+        let st = app.state::<AppState>();
+        let guard = st.session.lock().unwrap();
+        guard.as_ref().map(|s| s.user.default_workspace_id)
+    };
+    if let Some(wid) = wid {
+        return Ok(wid);
+    }
+    let st = app.state::<AppState>();
+    if !st.budget.until_blocked().is_zero() {
+        let wait = st.budget.until_refill();
+        return Err(format!(
+            "API hourly limit reached. Next sync in {}.",
+            crate::budget::fmt_wait(wait)
+        ));
+    }
+    Err("not connected".into())
+}
 
 /// The data the user submitted in the timer bar, or the data reused by
 /// "Resume last entry".
@@ -356,14 +604,7 @@ fn do_start(app: &AppHandle<Wry>, payload: StartPayload) -> Result<(), String> {
         if st.timer.lock().unwrap().running {
             return Err("a timer is already running".into());
         }
-        let workspace_id = {
-            let guard = st.session.lock().unwrap();
-            let Some(Session { user, .. }) = guard.as_ref() else {
-                return Err("not connected".into());
-            };
-            user.default_workspace_id
-        };
-        (workspace_id, st.store.clone())
+        (require_workspace(&app)?, st.store.clone())
     };
 
     let now = chrono::Utc::now();
@@ -411,7 +652,7 @@ fn do_start(app: &AppHandle<Wry>, payload: StartPayload) -> Result<(), String> {
 /// Stops the running timer. The cached row gets its stop time and duration
 /// at once, with the dirty flag. The UI clears at once. The sync loop PUTs
 /// the change. If the push fails, the timer goes back to running.
-fn do_stop(app: &AppHandle<Wry>) -> Result<(), String> {
+pub(crate) fn do_stop(app: &AppHandle<Wry>) -> Result<(), String> {
     let st = app.state::<AppState>();
     let entry_id = match *st.entry_id.lock().unwrap() {
         Some(id) => id,
@@ -501,6 +742,23 @@ pub fn run() {
             {
                 app.state::<AppState>().budget.set_max(cap);
             }
+            // A restart clears the in-memory window, so restore a quota
+            // block the previous run recorded. Without this, a restart
+            // during a block immediately spends requests and re-hits the
+            // limit. The stored value is a wall-clock instant.
+            if let Some(until) = app
+                .state::<AppState>()
+                .store
+                .as_ref()
+                .and_then(|s| s.get_meta("quota_blocked_until"))
+            {
+                let now = chrono::Utc::now().timestamp();
+                if until > now {
+                    app.state::<AppState>()
+                        .budget
+                        .block_for(std::time::Duration::from_secs((until - now) as u64));
+                }
+            }
 
             // ---- Tray menu: status item with changing text, and actions ----
             // Linux trays do not get mouse events. All operations are in the menu.
@@ -554,18 +812,43 @@ pub fn run() {
             tray::refresh(app.handle());
             tray::spawn(app.handle().clone());
 
+            // ---- idle detection (local D-Bus reads, no API budget) ----
+            idle::spawn(app.handle().clone());
+
+            // ---- stop the timer on sleep or shutdown (logind signals) ----
+            power::spawn(app.handle().clone());
+
+            // ---- global shortcut (X11 only; Wayland reports a note) ----
+            if let Err(e) = apply_hotkey(app.handle()) {
+                crate::logger::log("warn", &format!("startup hotkey: {e}"));
+            }
+
             // ---- Startup: restore the session if a token is in the keyring ----
             // A temporary failure, such as being offline at startup, leaves the
             // status as verifying. The sync loop retries connect with the
-            // cached token by itself.
+            // cached token by itself. While a quota block is active, skip the
+            // attempt: GET /me is itself a request and would only re-hit the
+            // limit. The loop retries on its own after the block lifts.
             if let Some(token) = secrets::get_token() {
                 *app.state::<AppState>().token.lock().unwrap() = Some(token.clone());
-                let app_clone = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = sync::connect(&app_clone, token).await;
-                });
+                let blocked = !app.state::<AppState>().budget.until_blocked().is_zero();
+                if !blocked {
+                    let app_clone = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = sync::connect(&app_clone, token).await;
+                    });
+                }
             } else {
                 mark_disconnected(app.handle());
+            }
+
+            // Autostart passes --hidden: start minimized to the tray. The
+            // window still opens on a second launch (single-instance) or
+            // from the tray menu.
+            if std::env::args().any(|a| a == "--hidden") {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
             }
 
             // ---- background polling loop ----
@@ -588,6 +871,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_state,
+            get_idle_pending,
             set_api_token,
             logout,
             start_timer,
@@ -602,6 +886,7 @@ pub fn run() {
             update_entry,
             delete_entry,
             create_entry,
+            resolve_idle,
             get_diagnostics
         ])
         .run(tauri::generate_context!())

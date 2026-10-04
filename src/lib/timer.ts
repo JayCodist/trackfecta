@@ -55,6 +55,27 @@ export type AppSettings = {
   theme: string;
   /** The tray icon shows seconds while a timer runs. */
   trayShowSeconds: boolean;
+  /** Stop a running timer when the machine sleeps or shuts down. */
+  stopOnSleep: boolean;
+  /** Ask what to do with idle time when a timer runs. */
+  idleEnabled: boolean;
+  /** Idle threshold in minutes. Default 5. */
+  idleThresholdMin: number;
+  /** The global shortcut accelerator, such as "CommandOrControl+Alt+D". */
+  hotkey: string;
+  /** Whether the global shortcut is on. */
+  hotkeyEnabled: boolean;
+  /** True on Wayland, where global shortcuts cannot be registered. */
+  wayland: boolean;
+};
+
+/** An idle period that ended while the timer ran. Mirrors the Rust
+ * PendingIdle, the payload of the idle-dialog event. Unix seconds. */
+export type IdlePending = {
+  idleStart: number;
+  idleEnd: number;
+  idleSeconds: number;
+  runningDescription: string | null;
 };
 
 export type TimerState = {
@@ -69,6 +90,12 @@ export type TimerState = {
   entries: EntryRow[];
   /** Requests left in the rolling hour. The free plan allows about 30. */
   requestsLeft: number;
+  /** True while a server quota block (402 or 429) is active. */
+  blocked: boolean;
+  /** Seconds until the next request can go out. Zero when nothing waits. */
+  nextSyncIn: number;
+  /** Idle backend in use: "gnome", "kde", or "none". */
+  idleBackend: string;
 };
 
 export const EMPTY: TimerState = {
@@ -79,6 +106,9 @@ export const EMPTY: TimerState = {
   status: "verifying",
   entries: [],
   requestsLeft: 0,
+  blocked: false,
+  nextSyncIn: 0,
+  idleBackend: "",
 };
 
 /**
@@ -96,6 +126,14 @@ export function fmtDuration(secs: number): string {
   const m = Math.floor((secs % 3600) / 60);
   const s = Math.floor(secs % 60);
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/** Format a wait time for a message: "28m", "1h 05m". Rounds minutes up.
+ * Mirrors budget::fmt_wait on the Rust side. */
+export function fmtWait(secs: number): string {
+  const mins = Math.ceil(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
 }
 
 export function fmtShort(secs: number): string {

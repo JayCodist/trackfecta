@@ -89,7 +89,11 @@ async fn tick(app: &AppHandle<Wry>) {
         // The startup connect runs at the same time as this loop. Without
         // this guard, a focus wakeup re-ran connect and every connect-time
         // request fired twice. That showed up as doubled log lines.
-        if let Some(token) = cached_token.filter(|_| !connecting) {
+        // A quota block must stop reconnects too: GET /me is itself a
+        // request. Retrying it on every focus wakeup while the server was
+        // blocking kept the window full and the app stuck.
+        let headroom = app.state::<AppState>().budget.has_headroom();
+        if let Some(token) = cached_token.filter(|_| !connecting && headroom) {
             // Retry a connection that failed for a temporary reason, such as
             // being offline at startup.
             let _ = connect(app, token).await;
@@ -118,7 +122,9 @@ async fn tick(app: &AppHandle<Wry>) {
         }
         Err(TogglError::RateLimited { retry_after }) => {
             // Toggl's own limit does not agree with our model. Honor it and
-            // back off.
+            // back off. Record the block so every path (poll, push, and
+            // reconnect) pauses, not only this one.
+            note_rate_limit(app, retry_after);
             tokio::time::sleep(Duration::from_secs(retry_after.max(30))).await;
         }
         Err(other) => emit_toast(app, &other.to_string()),
@@ -249,6 +255,7 @@ async fn handle_push_error(
                 "warn",
                 &format!("push {} rate-limited, retry in {retry_after}s", dirty.id),
             );
+            note_rate_limit(app, retry_after);
             emit_toast(app, &format!("API limit reached. Retrying in {retry_after}s."));
             tokio::time::sleep(Duration::from_secs(retry_after.max(30))).await;
         }
@@ -310,6 +317,11 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
                 client: Arc::new(client),
                 user,
             });
+            // A successful GET /me proves the quota window is open again.
+            st.budget.clear_block();
+            if let Some(store) = st.store.as_ref() {
+                store.set_meta("quota_blocked_until", 0);
+            }
             drop(st);
             // Take the first snapshot right away. The full window plus the
             // reconcile step applies deletions made on other devices while
@@ -321,19 +333,45 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
             fetch_reference_data(app).await;
             Ok(())
         }
-        Err(e) => {
-            if matches!(e, TogglError::Unauthorized) {
+        Err(e) => match e {
+            TogglError::Unauthorized => {
                 // The token was revoked or expired. Stop using it and show
                 // the Auth screen.
                 *st.token.lock().unwrap() = None;
                 drop(st);
                 mark_disconnected(app);
+                Err(e)
             }
-            // A network failure is temporary. Stay "verifying". The loop
-            // retries with the cached token on the next tick.
-            Err(e)
-        }
+            TogglError::RateLimited { retry_after } => {
+                // The quota window is full. Honor the server's reset time.
+                // Stay "verifying". The loop pauses reconnects until the
+                // block lifts. See tick.
+                drop(st);
+                note_rate_limit(app, retry_after);
+                Err(e)
+            }
+            other => {
+                // A network failure is temporary. Stay "verifying". The loop
+                // retries with the cached token on the next tick.
+                Err(other)
+            }
+        },
     }
+}
+
+/// Record a server quota limit (402 or 429). The budget blocks every
+/// request until the reset time. The time is also stored in the cache, so
+/// a restart does not forget the block and hammer the API again.
+fn note_rate_limit(app: &AppHandle<Wry>, retry_after: u64) {
+    let st = app.state::<AppState>();
+    let d = Duration::from_secs(retry_after.max(30));
+    st.budget.block_for(d);
+    if let Some(store) = st.store.as_ref() {
+        let until = chrono::Utc::now().timestamp() + d.as_secs() as i64;
+        store.set_meta("quota_blocked_until", until);
+    }
+    drop(st);
+    broadcast(app);
 }
 
 /// Pulls entries changed since the last sync, or a full page on the first

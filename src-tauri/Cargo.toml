@@ -27,8 +27,9 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 tokio = { version = "1", features = ["time", "macros", "sync"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
-# Tray-icon text rendering: real desktop font via Pango/Cairo (system libs,
-# already present through the GTK stack Tauri itself requires).
-cairo-rs = "0.18"
-pango = { version = "0.18", features = ["v1_42"] }
-pangocairo = "0.18"
+
+# Idle detection over the session D-Bus bus (Mutter IdleMonitor, KDE
+# ScreenSaver). Already in the lock tree through the single-instance plugin,
+# so this adds no new compile cost. Linux only.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"

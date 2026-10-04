@@ -8,6 +8,7 @@
     dotColor,
     faint,
     fmtDuration,
+    fmtWait,
     type EntryRow,
     type LastEntry,
     type ProjectOption,
@@ -56,8 +57,24 @@
       selTags = last.tags ?? [];
       billable = last.billable;
     });
+    // App-local quick start: Ctrl+D (or Cmd+D) starts the timer with what
+    // is in the bar. Works on Wayland, where global shortcuts cannot be
+    // registered. Only while this window has focus.
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key === "d" || e.key === "D")
+      ) {
+        e.preventDefault();
+        if (!timer.running && !busy) void start();
+      }
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       clearInterval(id);
+      window.removeEventListener("keydown", onKey);
       unPickers.then((f) => f());
       unResume.then((f) => f());
     };
@@ -561,7 +578,9 @@
     <Settings {projects} {timer} />
   {/if}
 
-  {#if timer.status === "connected" && timer.requestsLeft === 0}
-    <p class="quota">API quota reached. Sync paused until the next hour.</p>
+  {#if timer.blocked || (timer.status === "connected" && timer.requestsLeft === 0)}
+    <p class="quota">
+      API quota reached. Next sync in {fmtWait(timer.nextSyncIn)}.
+    </p>
   {/if}
 </div>
