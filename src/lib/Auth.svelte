@@ -23,7 +23,7 @@
 <main class="auth-wrap">
   <section class="card auth-card">
     <span class="auth-logo">⏱</span>
-    <h1>Welcome to TrackFecta</h1>
+    <h1>Welcome to Trackfecta</h1>
     <p class="muted" style="margin:0;font-size:13.5px;line-height:1.5">
       Paste your Toggl&nbsp;Track API token to get started. You can find it on your
       <a
@@ -50,7 +50,7 @@
       <p class="error">{error}</p>
     {/if}
     <p class="fineprint">
-      TrackFecta is an unofficial client and is not affiliated with, endorsed by,
+      Trackfecta is a beautiful, but unofficial client and is not affiliated with, endorsed by,
       or sponsored by Toggl™.
     </p>
   </section>

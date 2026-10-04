@@ -9,6 +9,8 @@
     faint,
     fmtDuration,
     fmtWait,
+    todayAt,
+    toTimeValue,
     type EntryRow,
     type LastEntry,
     type ProjectOption,
@@ -27,6 +29,19 @@
   // entry while it runs.
   let runDesc = $state("");
   let runDescFocused = $state(false);
+
+  // The running entry's start time. Clicking the big time opens an HH:MM
+  // editor, like the official desktop clients. Enter or blur commits,
+  // Escape cancels. The commit is local and instant. The sync loop pushes
+  // the new start to the server.
+  let editStart = $state(false);
+  let draftStart = $state("");
+  let startCancelled = $state(false);
+
+  /** Focus an element when it is created. Used by the start-time input. */
+  function autofocus(node: HTMLElement) {
+    node.focus();
+  }
 
   let tab = $state<"list" | "settings">("list");
 
@@ -143,6 +158,25 @@
     if (runDesc.trim() !== cur.trim()) void applyChange({ description: runDesc });
   }
 
+  function openStartEdit() {
+    if (!runningEntry) return;
+    draftStart = toTimeValue(runningEntry.start);
+    startCancelled = false;
+    editStart = true;
+  }
+
+  /** Commits a corrected start time (blur or Enter). Escape cancels. */
+  function commitStart() {
+    editStart = false;
+    if (startCancelled || !runningEntry) return;
+    if (!draftStart || draftStart === toTimeValue(runningEntry.start)) return;
+    const nowTs = Math.floor(Date.now() / 1000);
+    let start = todayAt(draftStart, runningEntry.start);
+    // No future start times. A time later than now means "from now".
+    if (start > nowTs) start = nowTs;
+    void applyChange({ start });
+  }
+
   const tagOptions = $derived(
     allTags.filter((t) => t.toLowerCase().includes(tagQuery.toLowerCase())),
   );
@@ -192,6 +226,7 @@
     projectId?: number | null;
     tags?: string[];
     billable?: boolean;
+    start?: number;
   }) {
     if (!runningEntry) return;
     const next = {
@@ -199,6 +234,7 @@
       projectId: runningEntry.projectId,
       tags: runningEntry.tags,
       billable: runningEntry.billable,
+      start: runningEntry.start,
       ...patch,
     };
     error = null;
@@ -206,7 +242,7 @@
       await invoke("update_entry", {
         id: runningEntry.id,
         description: next.description,
-        start: runningEntry.start,
+        start: next.start,
         stop: null,
         tags: next.tags,
         projectId: next.projectId,
@@ -316,7 +352,32 @@
             }
           }}
         />
-        <span class="timer-text running">{fmtDuration(elapsed)}</span>
+        {#if editStart}
+          <input
+            class="time-input"
+            type="time"
+            aria-label="Edit start time"
+            bind:value={draftStart}
+            use:autofocus
+            onkeydown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              else if (e.key === "Escape") {
+                startCancelled = true;
+                e.currentTarget.blur();
+              }
+            }}
+            onblur={commitStart}
+          />
+        {:else}
+          <button
+            class="timer-text running time-btn"
+            title="Edit start time"
+            aria-label="Edit start time"
+            onclick={openStartEdit}
+          >
+            {fmtDuration(elapsed)}
+          </button>
+        {/if}
         <button
           class="play-btn stop-btn"
           disabled={busy}
@@ -381,7 +442,7 @@
         <span class="timer-text">{fmtDuration(elapsed)}</span>
         <button
           class="play-btn"
-          disabled={busy || timer.status !== "connected"}
+          disabled={busy}
           title="Start timer"
           aria-label="Start timer"
           onclick={start}
@@ -580,7 +641,8 @@
 
   {#if timer.blocked || (timer.status === "connected" && timer.requestsLeft === 0)}
     <p class="quota">
-      API quota reached. Next sync in {fmtWait(timer.nextSyncIn)}.
+      API quota reached. Tracking works offline, and the sync resumes in
+      {fmtWait(timer.nextSyncIn)}.
     </p>
   {/if}
 </div>

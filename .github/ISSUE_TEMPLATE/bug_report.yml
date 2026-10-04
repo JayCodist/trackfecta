@@ -38,7 +38,7 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: TrackFecta version
+      label: Trackfecta version
       description: Shown in the About dialog / release tag (e.g. 1.0.0)
     validations:
       required: true

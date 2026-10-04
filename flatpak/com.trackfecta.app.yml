@@ -1,4 +1,4 @@
-# TrackFecta Flatpak manifest (Flathub submission starting point).
+# Trackfecta Flatpak manifest (Flathub submission starting point).
 #
 # The app is a Tauri v2 (Rust + WebKitGTK) tray client. The build runs the
 # normal Tauri pipeline offline, produces a .deb, then unpacks the .deb into

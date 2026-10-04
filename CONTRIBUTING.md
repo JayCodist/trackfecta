@@ -1,6 +1,6 @@
-# Contributing to TrackFecta
+# Contributing to Trackfecta
 
-Thanks for your interest in improving TrackFecta. This document explains how to
+Thanks for your interest in improving Trackfecta. This document explains how to
 set up a development environment, how we work, and what a good pull request
 looks like. All contributions are licensed under the project's
 [MIT License](LICENSE). When you open a PR, you agree to that. There is no CLA.
@@ -47,7 +47,7 @@ interactions.
 
    ```bash
    git clone https://github.com/JayCodist/trackfecta.git
-   cd TrackFecta
+   cd trackfecta
    npm install
    ```
 

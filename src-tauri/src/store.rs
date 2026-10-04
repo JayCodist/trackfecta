@@ -614,6 +614,25 @@ impl Store {
         )
         .ok()
     }
+
+    /// The most recent STOPPED entry from the cache. This is what the tray
+    /// "Resume last entry" item reuses when no timer is running. Reading the
+    /// cache uses no API requests.
+    pub fn last_stopped_entry(&self) -> Option<EntryRow> {
+        let conn = self.conn.lock().ok()?;
+        conn.query_row(
+            "SELECT e.id, e.workspace_id, e.description, e.start_ts, e.stop_ts, e.duration,
+                    e.project_id, e.tags, e.dirty, e.billable, p.name, p.color, c.name
+             FROM time_entries e
+             LEFT JOIN picker_projects p ON p.id = e.project_id
+             LEFT JOIN clients c ON c.id = p.client_id
+             WHERE e.deleted=0 AND e.stop_ts IS NOT NULL
+             ORDER BY e.stop_ts DESC LIMIT 1",
+            [],
+            read_entry_row,
+        )
+        .ok()
+    }
 }
 
 /// Shared row reader for the entry queries. The column order must match

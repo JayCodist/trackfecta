@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TrackFecta",
+  "productName": "Trackfecta",
   "version": "1.0.0",
   "identifier": "com.trackfecta.app",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "TrackFecta",
+        "title": "Trackfecta",
         "width": 480,
         "height": 620,
         "minWidth": 400,
@@ -42,7 +42,7 @@
       }
     },
     "shortDescription": "Unofficial Toggl Track desktop client",
-    "longDescription": "TrackFecta is an unofficial, tray-first desktop client for Toggl Track on Linux. Not affiliated with Toggl.",
+    "longDescription": "Trackfecta is a beautiful, but unofficial, tray-first desktop client for Toggl Track on Linux. Not affiliated with Toggl.",
     "license": "MIT",
     "homepage": "https://github.com/JayCodist/trackfecta",
     "category": "Productivity"

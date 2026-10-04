@@ -186,15 +186,14 @@ async fn push_dirty(app: &AppHandle<Wry>) -> bool {
         "tags": dirty.tags,
         "billable": dirty.billable,
         "duronly": false,
-        "created_with": "TrackFecta",
+        "created_with": "Trackfecta",
     });
     if dirty.id > 0 && dirty.stop.is_none() {
-        // This is an edit of a running entry on the server. Send only the
-        // metadata. If stop and duration are present, the PUT route treats
-        // them as the create convention, which it does not accept the same
-        // way as POST.
+        // This is an edit of a running entry on the server. Keep the new
+        // start (a corrected start time) but send no stop or duration. If
+        // those are present, the PUT route treats them as the create
+        // convention, which it does not accept the same way as POST.
         let map = body.as_object_mut().unwrap();
-        map.remove("start");
         map.remove("stop");
         map.remove("duration");
         map.remove("duronly");
@@ -316,6 +315,7 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
     let client = TogglClient::new(&token, budget);
     match client.me().await {
         Ok(user) => {
+            let wid = user.default_workspace_id;
             *st.session.lock().unwrap() = Some(Session {
                 client: Arc::new(client),
                 user,
@@ -324,6 +324,9 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
             st.budget.clear_block();
             if let Some(store) = st.store.as_ref() {
                 store.set_meta("quota_blocked_until", 0);
+                // Save the workspace id. Start and manual create work
+                // through a quota block with it, without a live session.
+                store.set_setting("workspace_id", &wid.to_string());
             }
             // Take the first snapshot right away. The full window plus the
             // reconcile step applies deletions made on other devices while
@@ -384,7 +387,11 @@ pub async fn force_sync(app: &AppHandle<Wry>) -> Result<(), String> {
         return Err("Not connected to Toggl.".into());
     }
     if !app.state::<AppState>().budget.has_headroom() {
-        return Err("API quota reached. Wait for a slot to free up.".into());
+        let wait = app.state::<AppState>().budget.until_refill();
+        return Err(format!(
+            "API quota reached. Next sync in {}.",
+            crate::budget::fmt_wait(wait)
+        ));
     }
     // Queued local changes outrank a poll, same as the loop.
     if push_dirty(app).await {

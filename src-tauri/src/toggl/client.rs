@@ -33,7 +33,7 @@ pub struct TogglClient {
 impl TogglClient {
     pub fn new(token: &str, budget: Arc<Budget>) -> Self {
         let http = Client::builder()
-            .user_agent(concat!("TrackFecta/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("Trackfecta/", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("reqwest client");
         Self {

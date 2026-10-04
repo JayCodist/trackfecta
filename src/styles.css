@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================
-   TrackFecta design tokens. These mirror the official Toggl Track
+   Trackfecta design tokens. These mirror the official Toggl Track
    desktop app (light and dark).
    ============================================================ */
 :root {
@@ -191,6 +191,33 @@ body {
 }
 .timer-text.running {
   color: var(--text-strong);
+}
+
+/* The running time doubles as the start-time editor trigger. It looks like
+   the label until hover. */
+button.timer-text {
+  font: inherit;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: text;
+}
+button.timer-text:hover {
+  background: var(--border-2);
+}
+
+.time-input {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  background: var(--border-2);
+  border: none;
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: none;
 }
 
 .play-btn {

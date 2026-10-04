@@ -556,6 +556,30 @@
   </div>
 
   <div>
+    <h3 class="set-title">Web</h3>
+    <div class="set-group">
+      <div class="set-row">
+        <div class="set-main">
+          <div class="set-label">Toggl Track</div>
+          <div class="set-hint">Reports and timesheet live in the web app.</div>
+        </div>
+        <div class="set-ctl">
+          <a
+            class="link"
+            href="https://track.toggl.com/timer"
+            target="_blank"
+            rel="noreferrer">Open Track</a>
+          <a
+            class="link"
+            href="https://track.toggl.com/reports"
+            target="_blank"
+            rel="noreferrer">Reports</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
     <h3 class="set-title">Appearance</h3>
     <div class="set-group">
       <div class="set-row">
@@ -690,7 +714,7 @@
               Global shortcuts need an X11 session. On Wayland, GNOME can
               bind the same keys for you: open Settings app, Keyboard, View
               and Customize Shortcuts, Custom Shortcuts, and add a command
-              for <code>trackfecta</code> with your chosen shortcut. In the
+              for <code>Trackfecta</code> with your chosen shortcut. In the
               window, Ctrl+D always works.
             {/if}
           </div>
@@ -818,30 +842,6 @@
   </div>
 
   <div>
-    <h3 class="set-title">Web</h3>
-    <div class="set-group">
-      <div class="set-row">
-        <div class="set-main">
-          <div class="set-label">Toggl Track</div>
-          <div class="set-hint">Reports and timesheet live in the web app.</div>
-        </div>
-        <div class="set-ctl">
-          <a
-            class="link"
-            href="https://track.toggl.com/timer"
-            target="_blank"
-            rel="noreferrer">Open Track</a>
-          <a
-            class="link"
-            href="https://track.toggl.com/reports"
-            target="_blank"
-            rel="noreferrer">Reports</a>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div>
     <h3 class="set-title">Diagnostics</h3>
     <div class="set-group">
       <div class="set-row">
@@ -876,7 +876,7 @@
       <div class="set-row">
         <div class="set-main">
           <div class="set-label">
-            TrackFecta <span class="muted" style="font-weight:400">v{appVersion}</span>
+            Trackfecta <span class="muted" style="font-weight:400">v{appVersion}</span>
             {#if projects.length > 0}
               <span
                 class="dot"

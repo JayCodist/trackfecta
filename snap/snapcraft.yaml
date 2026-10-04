@@ -1,4 +1,4 @@
-# TrackFecta Snap package recipe (packaging starting point).
+# Trackfecta Snap package recipe (packaging starting point).
 #
 # Tauri v2 (Rust + WebKitGTK) tray app. Snap has no general D-Bus plug like
 # Flatpak, so the interfaces below map each need to a snap interface:
@@ -14,11 +14,11 @@
 # If strict confinement cannot reach the tray on a target system, fall back to
 # `confinement: classic`. See README, "Packaging status".
 name: trackfecta
-title: TrackFecta
+title: Trackfecta
 version: "1.0.0"
 summary: Unofficial Toggl Track desktop client for Linux
 description: |
-  TrackFecta is an unofficial, tray-first desktop client for Toggl Track on
+  Trackfecta is a beautiful, but unofficial, tray-first desktop client for Toggl Track on
   Linux. It is not affiliated with, endorsed by, or sponsored by Toggl.
   It talks to the public Toggl Track REST API with your own API token and
   stores that token in the OS keyring.

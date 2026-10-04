@@ -3,17 +3,22 @@
 
 Produces two outputs:
   1. app-icon.png   full-color 1024x1024 tile. Feed to `npm run icons`.
-  2. stdout         a 48x48 coverage mask as a Rust array literal for
-                    tray.rs. The tray tints this mask per state: accent
-                    while running, grey while idle. The chevron and the
-                    underscore are carved out as negative space, so the
-                    monochrome tray mark stays legible on any panel color.
+  2. tray-mark.bin  a 48x48 coverage mask as raw alpha bytes for tray.rs
+                    (include_bytes!). The tray tints this mask per state:
+                    accent while running, light grey while idle. The chevron
+                    and the underscore are carved out as negative space, so
+                    the monochrome tray mark stays legible on any panel
+                    color. The mask is cropped to the mark's bounding box
+                    and rescaled to fill the slot: the panel scales the
+                    whole image into its icon slot, so any margin baked
+                    into the mask shrinks the stopwatch on the panel.
 
 Geometry mirrors the SVG by hand. All coordinates are 200x200 viewBox
 units, multiplied by one scale factor. Colors match styles.css:
 body #dd3873 (--accent), glyph white (as on .play-btn).
 """
 
+import os
 import sys
 from PIL import Image, ImageDraw
 
@@ -93,31 +98,45 @@ def glyph_alpha(size):
     return layer
 
 
-def make_mask():
-    """Body-only coverage at 48x48: dial minus the carved glyph."""
-    big = 48 * 8  # supersample
+def make_mask(size=48, pad=2):
+    """Body-only coverage at `size`x`size`: dial minus the carved glyph.
+
+    The result is cropped to the mark's bounding box and rescaled to fill
+    the slot (plus `pad` px of breathing room on each side). The panel
+    scales the whole image into its icon slot, so margins baked into the
+    mask shrink the stopwatch on screen; cropping makes it render as large
+    as the other panel icons.
+    """
+    big = size * 8  # supersample
     body = draw_logo(big, tile=False)
     alpha = body.getchannel("A")
     carve = glyph_alpha(big)
     knocked = Image.frombytes(
         "L", alpha.size, bytes(max(a - c, 0) for a, c in zip(alpha.tobytes(), carve.tobytes()))
     )
-    return knocked.resize((48, 48), Image.LANCZOS)
+    bbox = knocked.point(lambda v: 255 if v > 8 else 0).getbbox()
+    x0, y0, x1, y1 = bbox
+    side = (x1 - x0) + (y1 - y0)
+    side = max(x1 - x0, y1 - y0) + pad * 2 * 8
+    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    box = (cx - side / 2.0, cy - side / 2.0, cx + side / 2.0, cy + side / 2.0)
+    return knocked.crop(box).resize((size, size), Image.LANCZOS)
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "app-icon.png"
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.join(here, "..")
+    icon_path = os.path.join(root, "app-icon.png")
+    bin_path = os.path.join(root, "src-tauri", "icons", "tray-mark.bin")
     # Full-color mark on a transparent background, matching the source SVG:
     # accent dial and crown with a white chevron and underscore.
-    draw_logo(1024, tile=False).save(out)
-    print(f"wrote {out}", file=sys.stderr)
+    draw_logo(1024, tile=False).save(icon_path)
+    print(f"wrote {icon_path}", file=sys.stderr)
 
     data = make_mask().tobytes()
-    print("const MARK: [u8; 48 * 48] = [")
-    for row in range(48):
-        vals = ",".join(str(v) for v in data[row * 48:(row + 1) * 48])
-        print(f"    {vals},")
-    print("];")
+    with open(bin_path, "wb") as f:
+        f.write(data)
+    print(f"wrote {bin_path} ({len(data)} bytes)", file=sys.stderr)
 
 
 if __name__ == "__main__":

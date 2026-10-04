@@ -56,19 +56,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
-          releaseName: "TrackFecta v__VERSION__"
+          releaseName: "Trackfecta v__VERSION__"
           releaseBody: |
-            TrackFecta is an unofficial Toggl Track desktop client for Linux.
+            Trackfecta is a beautiful, but unofficial Toggl Track desktop client for Linux.
             It is not affiliated with or endorsed by Toggl.
 
             Pick the asset that matches your system (all are x86_64):
 
             - **Ubuntu / Debian:** the `.deb` asset.
-              `sudo apt install ./TrackFecta_*_amd64.deb`
+              `sudo apt install ./Trackfecta_*_amd64.deb`
             - **Fedora / openSUSE / RHEL:** the `.rpm` asset.
-              `sudo rpm -Uvh trackfecta-*.x86_64.rpm`
+              `sudo rpm -Uvh Trackfecta-*.x86_64.rpm`
             - **Any Linux (self-contained):** the `.AppImage` asset.
-              `chmod +x TrackFecta_*.AppImage` and run it. The AppImage also
+              `chmod +x Trackfecta_*.AppImage` and run it. The AppImage also
               updates itself in app from Settings.
 
             GNOME users need the AppIndicator extension for the tray icon.

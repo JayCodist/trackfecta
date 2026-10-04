@@ -63,7 +63,7 @@ pub fn init(data_dir: &std::path::Path) {
     })));
     log(
         "info",
-        &format!("--- TrackFecta {} started ---", env!("CARGO_PKG_VERSION")),
+        &format!("--- Trackfecta {} started ---", env!("CARGO_PKG_VERSION")),
     );
 }
 

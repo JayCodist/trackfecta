@@ -344,12 +344,15 @@ fn update_entry(
             Some(description.as_str())
         };
         store.update_local(id, desc, &tags, start, stop, project_id, billable);
-        // The tray tooltip and the timer bar read timer.description, not the
-        // cached row. Keep that field current for the running entry.
+        // The tray tooltip, the timer bar, and the idle logic read
+        // timer.description and timer.started_at, not the cached row. Keep
+        // both current when the running entry is edited, such as a corrected
+        // start time.
         if stop.is_none() {
             let mut t = st.timer.lock().unwrap();
             if t.running {
                 t.description = desc.map(str::to_string);
+                t.started_at = Some(start.to_string());
             }
         }
     }
@@ -600,8 +603,11 @@ fn toggle_timer(app: &AppHandle<Wry>) {
 // ---------- core operations (shared by the tray and the commands) ----------
 
 /// The default workspace id for the active session. Start and the manual
-/// create need it. When there is no session, the message explains why:
-/// a quota block reports the wait until the next sync
+/// create need it. When there is no live session, fall back to the id
+/// saved at the last successful connect. A quota block or a network
+/// failure must not stop local tracking: the entry goes into the cache
+/// with the dirty flag, and the sync loop pushes it when the window opens.
+/// The error only covers a fresh install that never connected.
 fn require_workspace(app: &AppHandle<Wry>) -> Result<i64, String> {
     let wid = {
         let st = app.state::<AppState>();
@@ -612,14 +618,15 @@ fn require_workspace(app: &AppHandle<Wry>) -> Result<i64, String> {
         return Ok(wid);
     }
     let st = app.state::<AppState>();
-    if !st.budget.until_blocked().is_zero() {
-        let wait = st.budget.until_refill();
-        return Err(format!(
-            "API hourly limit reached. Next sync in {}.",
-            crate::budget::fmt_wait(wait)
-        ));
+    let saved = st
+        .store
+        .as_ref()
+        .and_then(|s| s.get_setting("workspace_id"))
+        .and_then(|v| v.parse::<i64>().ok());
+    match saved {
+        Some(ws) => Ok(ws),
+        None => Err("not connected".into()),
     }
-    Err("not connected".into())
 }
 
 /// The data the user submitted in the timer bar, or the data reused by
@@ -721,14 +728,33 @@ pub(crate) fn do_stop(app: &AppHandle<Wry>) -> Result<(), String> {
     Ok(())
 }
 
-/// Shows the window and asks the UI to prefill a new entry from the last
-/// entry: description, project, and tags.
+/// Resumes the last entry: starts a timer with its description, project,
+/// tags, and billable flag. Same data the hotkey reuses in `toggle_timer`.
+/// The UI is also asked to prefill the bar, which is what the user sees when
+/// the start cannot happen: a blocked quota, or no entry to resume.
 fn request_resume(app: &AppHandle<Wry>) {
     let last = app.state::<AppState>().last_entry.lock().unwrap().clone();
     if let Some(w) = app.get_webview_window("main") {
         show_window(&w);
     }
-    let _ = app.emit("resume-requested", last);
+    let _ = app.emit("resume-requested", last.clone());
+    let Some(l) = last else {
+        return;
+    };
+    if app.state::<AppState>().timer.lock().unwrap().running {
+        return;
+    }
+    if let Err(e) = do_start(
+        app,
+        StartPayload {
+            description: l.description.unwrap_or_default(),
+            project_id: l.project_id,
+            tags: l.tags,
+            billable: l.billable,
+        },
+    ) {
+        state::emit_toast(app, &e);
+    }
 }
 
 fn show_window(window: &WebviewWindow) {
@@ -821,7 +847,7 @@ pub fn run() {
             // ---- Tray menu: status item with changing text, and actions ----
             // Linux trays do not get mouse events. All operations are in the menu.
             let status = MenuItem::with_id(app, "status", "Today: 0:00", true, None::<&str>)?;
-            let show = MenuItem::with_id(app, "show", "Show TrackFecta", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "Show Trackfecta", true, None::<&str>)?;
             let resume =
                 MenuItem::with_id(app, "resume", "Resume last entry", false, None::<&str>)?;
             let stop = MenuItem::with_id(app, "stop", "Stop timer", false, None::<&str>)?;
@@ -839,7 +865,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
-                .tooltip("TrackFecta: unofficial Toggl Track client")
+                .tooltip("Trackfecta: unofficial Toggl Track client")
                 .on_menu_event(|app, event| match event.id().0.as_str() {
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
@@ -956,5 +982,5 @@ pub fn run() {
             open_release_page
         ])
         .run(tauri::generate_context!())
-        .expect("error while running TrackFecta");
+        .expect("error while running Trackfecta");
 }

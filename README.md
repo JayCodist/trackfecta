@@ -1,10 +1,10 @@
-# TrackFecta
+# Trackfecta
 
 ![CI](https://github.com/JayCodist/trackfecta/actions/workflows/ci.yml/badge.svg)
 [![Release](https://img.shields.io/github/v/release/JayCodist/trackfecta)](https://github.com/JayCodist/trackfecta/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-TrackFecta is an unofficial Toggl Track desktop client for Linux. It runs from
+Trackfecta is a beautiful but unofficial Toggl Track desktop client for Linux. It runs from
 the system tray. It is built with Tauri v2 (Rust) and Svelte 5 plus Tailwind
 CSS v4.
 
@@ -17,21 +17,21 @@ CSS v4.
 
 ## Disclaimer
 
-TrackFecta is an independent, unofficial client. It is not affiliated with,
+Trackfecta is an independent, unofficial client. It is not affiliated with,
 endorsed by, or sponsored by Toggl OÜ. Toggl is a trademark of Toggl OÜ.
-TrackFecta talks to the public Toggl Track REST API with your own API token.
+Trackfecta talks to the public Toggl Track REST API with your own API token.
 It sends your data only to `api.track.toggl.com`.
 
 ## Background
 
-The official desktop apps do not run on Linux. TrackFecta is a native Rust
+The official desktop apps do not run on Linux. Trackfecta is a native Rust
 process with a WebKitGTK view. It starts fast, uses little memory, and runs
-like a normal Linux application:
+like a traditional Linux application:
 
 - It runs from the system tray and keeps the timer running in the background.
 - The close button hides the window to the tray. It does not stop the timer.
 - Only one instance runs. A second launch shows the existing window.
-- It can start automatically when you log in.
+- It can start automatically when you log in (configurable).
 - It talks directly to the Toggl Track API. There is no Electron and no
   bundled web app.
 - Your token lives in the OS keyring, not in a config file.
@@ -63,7 +63,7 @@ like a normal Linux application:
 - `.deb`, `.rpm`, and AppImage packages are built by the release pipeline and
   published on GitHub Releases.
 
-Time reports are out of scope. Use the web app for reports. The official
+Time reports are out of scope. Use the web app for reports (there are links in the settings). The official
 desktop clients do the same.
 
 ## Install
@@ -74,15 +74,15 @@ Each release ships a `.deb`, an `.rpm`, and an AppImage (all x86_64).
 
 | Format | Command |
 |---|---|
-| Ubuntu / Debian (`.deb`) | `sudo apt install ./trackfecta_*_amd64.deb` |
-| Fedora / RHEL (`.rpm`) | `sudo rpm -Uvh trackfecta-*.x86_64.rpm` |
-| Any Linux (AppImage) | `chmod +x TrackFecta_*.AppImage && ./TrackFecta_*.AppImage` |
+| Ubuntu / Debian (`.deb`) | `sudo apt install ./Trackfecta_*_amd64.deb` |
+| Fedora / RHEL (`.rpm`) | `sudo rpm -Uvh Trackfecta-*.x86_64.rpm` |
+| Any Linux (AppImage) | `chmod +x Trackfecta_*.AppImage && ./Trackfecta_*.AppImage` |
 
 The AppImage also updates itself in app from Settings. The `.deb` and `.rpm`
 show an "update available" notice that links to the release page.
 
 You can also build from source. See
-[Building from source](#building-from-source). TrackFecta is a small native
+[Building from source](#building-from-source). Trackfecta is a small native
 app and compiles in a few minutes.
 
 Requirements for any install method: a GTK 3 desktop with
@@ -104,9 +104,9 @@ global shortcut works on X11 only. On Wayland you still have two options:
 
 - The in-window shortcut `Ctrl+D` (`Cmd+D` on macOS-style keyboards) works
   everywhere, including Wayland.
-- Bind TrackFecta in the GNOME Settings app: **Keyboard** > **View and
+- Bind Trackfecta in the GNOME Settings app: **Keyboard** > **View and
   Customize Shortcuts** > **Custom Shortcuts**, and add a command for
-  `trackfecta` with your chosen keys. Settings repeats these steps next to
+  `Trackfecta` with your chosen keys. Settings repeats these steps next to
   the shortcut recorder.
 
 ### Flatpak and Snap
@@ -120,7 +120,7 @@ welcome.
 
 ## Getting started
 
-1. Start TrackFecta. The first screen asks for your Toggl Track API token. You
+1. Start Trackfecta. The first screen asks for your Toggl Track API token. You
    can find the token on your
    [profile page](https://track.toggl.com/profile).
 2. The app writes the token to your system keyring (service
@@ -254,7 +254,7 @@ public issue for it.
 
 Released under the [MIT License](LICENSE).
 
-Copyright (c) 2026 TrackFecta contributors.
+Copyright (c) 2026 Trackfecta contributors.
 
 Third-party trademarks and logos remain the property of their owners. This
 project ships no Toggl brand assets.

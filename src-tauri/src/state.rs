@@ -269,7 +269,26 @@ fn update_tray(app: &AppHandle, t: &TimerState) {
     let _ = items.status.set_text(&label);
     let _ = items.stop.set_enabled(t.running);
 
-    let last = app.state::<AppState>().last_entry.lock().unwrap().clone();
+    let last = {
+        let st = app.state::<AppState>();
+        let mut last = st.last_entry.lock().unwrap().clone();
+        // The in-memory copy only covers entries this session started or
+        // saw running. After a restart, or when the entry was tracked on
+        // the web, fall back to the newest stopped row in the cache. This
+        // uses no API requests.
+        if !t.running && last.is_none() {
+            if let Some(row) = st.store.as_ref().and_then(|s| s.last_stopped_entry()) {
+                last = Some(LastEntry {
+                    description: row.description,
+                    project_id: row.project_id,
+                    tags: row.tags,
+                    billable: row.billable,
+                });
+                *st.last_entry.lock().unwrap() = last.clone();
+            }
+        }
+        last
+    };
     let _ = items.resume.set_enabled(!t.running && last.is_some());
     if let Some(last) = last {
         let label = last.description.unwrap_or_else(|| "Untitled".into());

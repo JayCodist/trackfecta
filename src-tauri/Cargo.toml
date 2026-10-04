@@ -2,7 +2,7 @@
 name = "trackfecta"
 version = "1.0.0"
 description = "Unofficial Toggl Track desktop client for Linux"
-authors = ["TrackFecta contributors"]
+authors = ["Trackfecta contributors"]
 license = "MIT"
 repository = "https://github.com/JayCodist/trackfecta"
 edition = "2021"
