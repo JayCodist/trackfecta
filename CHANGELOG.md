@@ -4,6 +4,16 @@ All notable changes to Trackfecta are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Organisation (workspace) switching. The app lists every organisation your
+  account belongs to. The switcher is a dropdown in Settings, in the Account
+  section. Each
+  organisation keeps its own entries, projects, clients, tags, and sync
+  cursor in the local cache. A running timer keeps running when you switch.
+
 ## [1.0.0] - 2026-10-01
 
 First public release.

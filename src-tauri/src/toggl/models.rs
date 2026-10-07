@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// The part of `GET /me` that we use.
 #[derive(Debug, Clone, Deserialize)]
@@ -11,6 +11,16 @@ pub struct UserInfo {
     #[serde(default)]
     pub email: Option<String>,
     pub default_workspace_id: i64,
+}
+
+/// One item of `GET /workspaces`: an organisation the user belongs to.
+/// In Toggl terms a workspace is an organisation. The app can switch
+/// between them. The UI gets this type directly from the cache.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub struct Workspace {
+    pub id: i64,
+    pub name: String,
 }
 
 /// The part of a time entry that we use (`GET /me/time_entries`, and the

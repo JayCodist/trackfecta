@@ -133,6 +133,20 @@
       d="M13.7 10a6 6 0 1 1-1.4-6.2l3 2.9"
     /></svg
 >
+{:else if name === "briefcase"}
+  <svg
+    viewBox="0 0 16 16"
+    width={size}
+    height={size}
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.4"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    ><rect x="1.8" y="4.6" width="12.4" height="9" rx="1.4" /><path
+      d="M5.6 4.6V3.4c0-.7.55-1.2 1.2-1.2h2.4c.65 0 1.2.5 1.2 1.2v1.2"
+    /><path d="M1.8 8.2h12.4"
+  /></svg>
 {:else if name === "list"}
   <svg
     viewBox="0 0 16 16"

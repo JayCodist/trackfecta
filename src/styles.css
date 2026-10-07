@@ -893,17 +893,26 @@ button.timer-text:hover {
   cursor: default;
 }
 
-/* The live quota line in Settings. */
+/* The live quota line in Settings. The status text sits on the left and the
+   Sync now button is pushed to the right end of the row. */
 .quota-line {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--muted-2);
   font-variant-numeric: tabular-nums;
 }
+.quota-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .quota-dot {
+  flex: none;
   width: 7px;
   height: 7px;
   border-radius: 50%;

@@ -7,7 +7,9 @@ use serde::de::DeserializeOwned;
 use std::sync::Arc;
 use thiserror::Error;
 
-use super::models::{Client as ClientInfo, TimeEntry, UserInfo, WorkspaceProject, WorkspaceTag};
+use super::models::{
+    Client as ClientInfo, TimeEntry, UserInfo, Workspace, WorkspaceProject, WorkspaceTag,
+};
 use crate::budget::Budget;
 
 const BASE: &str = "https://api.track.toggl.com/api/v9";
@@ -118,6 +120,17 @@ impl TogglClient {
     pub async fn me(&self) -> Result<UserInfo, TogglError> {
         let resp = self
             .request(Method::GET, "/me")
+            .send()
+            .await
+            .map_err(|e| TogglError::Network(e.to_string()))?;
+        Self::decode(resp).await
+    }
+
+    /// `GET /workspaces`: every organisation (workspace) the user belongs
+    /// to. One request per session, cached in SQLite for the switcher.
+    pub async fn workspaces(&self) -> Result<Vec<Workspace>, TogglError> {
+        let resp = self
+            .request(Method::GET, "/workspaces")
             .send()
             .await
             .map_err(|e| TogglError::Network(e.to_string()))?;

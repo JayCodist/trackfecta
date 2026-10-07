@@ -46,7 +46,7 @@ Toggl API token** from any reproduction material.
 
 ## Relevant project facts
 
-- Trackfecta stores the API token via the OS keyring (service `com.trackfecta.app`)
+- Trackfecta stores the API token via the OS keyring (service `io.github.jaycodist.trackfecta`)
   and never writes it to disk or logs.
 - Network calls go only to `api.track.toggl.com` over HTTPS.
 - The webview runs with a restrictive CSP and a minimal capability set

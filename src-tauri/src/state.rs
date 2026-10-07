@@ -52,6 +52,13 @@ pub struct TimerState {
     /// The idle-detection backend in use: gnome, kde, or none. The Settings
     /// screen shows it. See idle.rs.
     pub idle_backend: String,
+    /// The id of the organisation (workspace) currently active. The entry
+    /// list, pickers, and totals are scoped to it. Zero before the first
+    /// connect on a fresh install.
+    pub workspace_id: i64,
+    /// The cached name of the active organisation. None when the cache does
+    /// not know it yet.
+    pub workspace_name: Option<String>,
 }
 
 impl Default for TimerState {
@@ -67,6 +74,8 @@ impl Default for TimerState {
             blocked: false,
             next_sync_in: 0,
             idle_backend: String::new(),
+            workspace_id: 0,
+            workspace_name: None,
         }
     }
 }
@@ -94,6 +103,9 @@ pub struct IdleState {
 
 pub struct Session {
     pub client: Arc<TogglClient>,
+    /// The account info from `GET /me`. The default workspace id in it is
+    /// the fallback when the saved organisation choice is no longer valid.
+    #[allow(dead_code)]
     pub user: UserInfo,
 }
 
@@ -135,6 +147,11 @@ pub struct AppState {
     pub connecting: Arc<std::sync::atomic::AtomicBool>,
     /// Idle-monitor state. See idle.rs.
     pub idle: Mutex<IdleState>,
+    /// The organisation (workspace) the UI is scoped to. Set at connect from
+    /// the saved choice or the account default, and by switch_workspace.
+    /// Zero until a workspace is known. The value is persisted in the
+    /// settings table as "active_workspace".
+    pub active_workspace: Mutex<i64>,
 }
 
 impl AppState {
@@ -153,6 +170,7 @@ impl AppState {
                 pending: None,
                 backend: "none".into(),
             }),
+            active_workspace: Mutex::new(0),
         }
     }
 }
@@ -175,8 +193,26 @@ pub struct TrayItems {
 /// happened, so the UI shows cached data even during a quota block.
 pub fn snapshot(st: &AppState) -> TimerState {
     let mut t = st.timer.lock().unwrap().clone();
+    let wid = *st.active_workspace.lock().unwrap();
+    t.workspace_id = wid;
     if let Some(store) = st.store.as_ref() {
-        t.entries = store.entries_since(start_of_window(window_days(st.store.as_ref())));
+        t.workspace_name = store.workspace_name(wid);
+        if wid != 0 {
+            t.entries =
+                store.entries_since(wid, start_of_window(window_days(st.store.as_ref())));
+            // The running row is global (one running timer per user, in any
+            // organisation). Include it even when it belongs to another
+            // organisation, so the timer bar and the row stay correct after
+            // a switch. Stopped rows of other organisations stay hidden.
+            if let Some(open) = store.open_entry() {
+                if !t.entries.iter().any(|r| r.id == open.id) {
+                    t.entries.insert(0, open);
+                    t.entries.sort_by_key(|r| std::cmp::Reverse(r.start));
+                }
+            }
+        } else {
+            t.entries = Vec::new();
+        }
         let today = start_of_today();
         t.today_seconds = t
             .entries
@@ -277,7 +313,13 @@ fn update_tray(app: &AppHandle, t: &TimerState) {
         // the web, fall back to the newest stopped row in the cache. This
         // uses no API requests.
         if !t.running && last.is_none() {
-            if let Some(row) = st.store.as_ref().and_then(|s| s.last_stopped_entry()) {
+            let wid = *st.active_workspace.lock().unwrap();
+            let row = if wid != 0 {
+                st.store.as_ref().and_then(|s| s.last_stopped_entry(wid))
+            } else {
+                None
+            };
+            if let Some(row) = row {
                 last = Some(LastEntry {
                     description: row.description,
                     project_id: row.project_id,

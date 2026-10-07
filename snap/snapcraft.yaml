@@ -15,8 +15,16 @@
 # `confinement: classic`. See README, "Packaging status".
 name: trackfecta
 title: Trackfecta
+# The store listing icon is taken from this path (relative to the project
+# root) at upload time. Without it the store shows a generic placeholder.
+icon: src-tauri/icons/icon.png
 version: "1.0.0"
 summary: Unofficial Toggl Track desktop client for Linux
+# These four sync to the "More links" section of the store listing.
+website: https://github.com/JayCodist/trackfecta
+source-code: https://github.com/JayCodist/trackfecta
+issues: https://github.com/JayCodist/trackfecta/issues
+contact: https://github.com/JayCodist/trackfecta/security/advisories/new
 description: |
   Trackfecta is a beautiful, but unofficial, tray-first desktop client for Toggl Track on
   Linux. It is not affiliated with, endorsed by, or sponsored by Toggl.
@@ -40,7 +48,7 @@ apps:
   trackfecta:
     command: usr/bin/trackfecta
     # The GNOME extension auto-detects the desktop entry by common-id.
-    common-id: com.trackfecta.app
+    common-id: io.github.jaycodist.trackfecta
     extensions:
       - gnome
 
@@ -87,7 +95,15 @@ parts:
       ( cd "$CRAFT_PART_INSTALL/usr/bin" && mv "$(ls | head -n1)" trackfecta )
       # Rename the desktop entry to the common-id so the launcher resolves it.
       ( cd "$CRAFT_PART_INSTALL/usr/share/applications" \
-        && for d in ./*.desktop; do mv "$d" com.trackfecta.app.desktop; done )
+        && for d in ./*.desktop; do mv "$d" io.github.jaycodist.trackfecta.desktop; done )
+      # Metainfo ships in the repo (metadata/). The deb bundle has none, so
+      # install it here. The gnome extension validates it against the desktop
+      # file id.
+      install -Dm644 metadata/io.github.jaycodist.trackfecta.metainfo.xml \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo/io.github.jaycodist.trackfecta.metainfo.xml"
+      # Scalable icon, named after the desktop id so the launcher resolves it.
+      install -Dm644 src-tauri/icons/trackfecta-logo.svg \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/io.github.jaycodist.trackfecta.svg"
 
 plugs:
   # Secret Service for the API token.

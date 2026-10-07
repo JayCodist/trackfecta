@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Trackfecta contributors <JayCodist@users.noreply.github.com> -->
+<!-- SPDX-License-Identifier: MIT -->
+<component type="desktop-application">
+  <id>io.github.jaycodist.trackfecta</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Trackfecta</name>
+  <summary>Unofficial tray-first desktop client for Toggl Track</summary>
+  <content_rating type="oars-1.1" />
+
+
+  <branding>
+    <color type="primary" scheme_preference="light">#4fb3bf</color>
+    <color type="primary" scheme_preference="dark">#1f6b76</color>
+  </branding>
+
+  <description>
+    <p>
+      Trackfecta is a native Linux desktop client for Toggl Track, built
+      with Tauri v2. It runs from the system tray and keeps time with
+      little effort:
+    </p>
+    <ul>
+      <li>Start and stop quick entries from the window, the tray, or a
+        global shortcut</li>
+      <li>Resume yesterday's entry from the tray menu</li>
+      <li>Day-grouped entry list with offline cache</li>
+      <li>Idle detection with a keep, discard, or split dialog</li>
+      <li>Stop-on-sleep and stop-on-shutdown</li>
+      <li>API token stored in the system keyring, never on disk</li>
+    </ul>
+    <p>
+      Trackfecta is an independent, unofficial client. It is not
+      affiliated with, endorsed by, or sponsored by Toggl OÜ. It talks to
+      the public Toggl Track REST API with your own API token.
+    </p>
+    <p>
+      **Note:** On GNOME, the tray icon needs the AppIndicator shell
+      extension to be installed on the host system.
+    </p>
+  </description>
+
+  <categories>
+    <category>Utility</category>
+    <category>Office</category>
+  </categories>
+
+  <keywords>
+    <keyword translate="no">Toggl</keyword>
+    <keyword>time tracking</keyword>
+    <keyword>timer</keyword>
+    <keyword>timesheet</keyword>
+    <keyword>tray</keyword>
+  </keywords>
+
+  <url type="homepage">https://github.com/JayCodist/trackfecta</url>
+  <url type="bugtracker">https://github.com/JayCodist/trackfecta/issues</url>
+  <url type="help">https://github.com/JayCodist/trackfecta/blob/main/README.md</url>
+  <url type="vcs-browser">https://github.com/JayCodist/trackfecta</url>
+
+  <developer id="io.github.jaycodist">
+    <name>Johnson Ubaezuonu</name>
+  </developer>
+
+  <update_contact>JayCodist@users.noreply.github.com</update_contact>
+
+  <launchable type="desktop-id">io.github.jaycodist.trackfecta.desktop</launchable>
+
+  <releases>
+    <release version="1.0.0" date="2026-10-04">
+      <description>
+        <p>First packaged release.</p>
+        <ul>
+          <li>Quick entry start, stop, edit, and resume</li>
+          <li>Tray icon with live running time and today total</li>
+          <li>Idle detection, stop-on-sleep, stop-on-shutdown</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>The timer view with a running entry and the day list below</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/timer-running.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Entries grouped by day with per-day totals</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/timer-entries.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The settings view with account, web, and appearance options</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/settings.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The tray menu, with the running time in the panel</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/app-tray.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark mode, timer view</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/timer-running-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark mode, entries grouped by day</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/timer-entries-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark mode, settings view</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/settings-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dark mode, tray menu</caption>
+      <image type="source">https://raw.githubusercontent.com/JayCodist/trackfecta/v1.0.0/metadata/screenshots/app-tray-dark.png</image>
+    </screenshot>
+  </screenshots>
+</component>

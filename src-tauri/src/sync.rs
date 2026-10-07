@@ -315,7 +315,37 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
     let client = TogglClient::new(&token, budget);
     match client.me().await {
         Ok(user) => {
-            let wid = user.default_workspace_id;
+            // Cache the organisation list for the switcher. One request. A
+            // failure here is not fatal; the default workspace still works.
+            if let Ok(list) = client.workspaces().await {
+                if let Some(store) = st.store.as_ref() {
+                    store.replace_workspaces(&list);
+                }
+            }
+            // Choose the active organisation. Honor a saved choice when the
+            // user still belongs to it. Otherwise use the account default.
+            // An empty cached list means the list fetch failed. Then the
+            // saved choice is trusted, not dropped.
+            let cached = st
+                .store
+                .as_ref()
+                .map(|s| s.workspaces())
+                .unwrap_or_default();
+            let saved = st
+                .store
+                .as_ref()
+                .and_then(|s| s.get_setting("active_workspace"))
+                .and_then(|v| v.parse::<i64>().ok());
+            let valid = |id: i64| -> bool {
+                cached.is_empty()
+                    || cached.iter().any(|w| w.id == id)
+                    || id == user.default_workspace_id
+            };
+            let wid = match saved {
+                Some(id) if valid(id) => id,
+                _ => user.default_workspace_id,
+            };
+            *st.active_workspace.lock().unwrap() = wid;
             *st.session.lock().unwrap() = Some(Session {
                 client: Arc::new(client),
                 user,
@@ -327,6 +357,7 @@ pub async fn connect(app: &AppHandle<Wry>, token: String) -> Result<(), TogglErr
                 // Save the workspace id. Start and manual create work
                 // through a quota block with it, without a live session.
                 store.set_setting("workspace_id", &wid.to_string());
+                store.set_setting("active_workspace", &wid.to_string());
             }
             // Take the first snapshot right away. The full window plus the
             // reconcile step applies deletions made on other devices while
@@ -432,10 +463,17 @@ async fn refresh_inner(app: &AppHandle<Wry>, full: bool) -> Result<(), TogglErro
         let st = app.state::<AppState>();
         let guard = st.session.lock().unwrap();
         match guard.as_ref() {
-            Some(Session { client, user }) => (client.clone(), user.default_workspace_id),
+            Some(Session { client, .. }) => {
+                let wid = *st.active_workspace.lock().unwrap();
+                (client.clone(), wid)
+            }
             None => return Ok(()),
         }
     };
+    if workspace_id == 0 {
+        return Ok(());
+    }
+    let cursor_key = format!("last_sync:{workspace_id}");
     let (since, store, days) = {
         let st = app.state::<AppState>();
         let days = window_days(st.store.as_ref());
@@ -446,7 +484,7 @@ async fn refresh_inner(app: &AppHandle<Wry>, full: bool) -> Result<(), TogglErro
             // back. The reconcile step below depends on this.
             Some(start_of_window(days))
         } else {
-            st.store.as_ref().and_then(|s| s.get_meta("last_sync"))
+            st.store.as_ref().and_then(|s| s.get_meta(&cursor_key))
         };
         (since, st.store.clone(), days)
     };
@@ -500,14 +538,15 @@ async fn refresh_inner(app: &AppHandle<Wry>, full: bool) -> Result<(), TogglErro
                 );
             }
         }
-        store.set_meta("last_sync", cursor);
+        store.set_meta(&cursor_key, cursor);
         store.purge_tombstones();
     }
 
     let running_entry = entries.iter().find(|e| e.stop.is_none() && !e.is_deleted());
     // A delta poll stops including the running entry once the cursor passes
     // its last update. Check the open row in the cache before declaring "not
-    // running".
+    // running". The open row is global: a running entry in another
+    // organisation keeps the timer alive across a switch.
     let cached_open = if running_entry.is_none() {
         store.as_ref().and_then(|s| s.open_entry())
     } else {
@@ -572,18 +611,22 @@ async fn fetch_reference_data(app: &AppHandle<Wry>) {
     let (client, store, workspace_id) = {
         let st = app.state::<AppState>();
         let guard = st.session.lock().unwrap();
-        let Some(Session { client, user }) = guard.as_ref() else {
+        let Some(Session { client, .. }) = guard.as_ref() else {
             return;
         };
-        (client.clone(), st.store.clone(), user.default_workspace_id)
+        let wid = *st.active_workspace.lock().unwrap();
+        (client.clone(), st.store.clone(), wid)
     };
+    if workspace_id == 0 {
+        return;
+    }
     let Some(store) = store else { return };
     let mut changed = false;
     match client.workspace_projects(workspace_id).await {
         Ok(projects) => {
             let keep: Vec<i64> = projects.iter().map(|p| p.id).collect();
-            let stale = store.project_ids_except(&keep);
-            store.replace_projects(&projects);
+            let stale = store.project_ids_except(workspace_id, &keep);
+            store.replace_projects(workspace_id, &projects);
             if !stale.is_empty() {
                 store.remove_projects(&stale);
             }
@@ -594,7 +637,7 @@ async fn fetch_reference_data(app: &AppHandle<Wry>) {
     }
     match client.workspace_clients(workspace_id).await {
         Ok(clients) => {
-            store.replace_clients(&clients);
+            store.replace_clients(workspace_id, &clients);
             crate::logger::log("info", &format!("clients: cached {}", clients.len()));
             changed = true;
         }
@@ -602,7 +645,7 @@ async fn fetch_reference_data(app: &AppHandle<Wry>) {
     }
     match client.workspace_tags(workspace_id).await {
         Ok(tags) => {
-            store.replace_tags(&tags);
+            store.replace_tags(workspace_id, &tags);
             crate::logger::log("info", &format!("tags: cached {}", tags.len()));
             changed = true;
         }
@@ -612,4 +655,70 @@ async fn fetch_reference_data(app: &AppHandle<Wry>) {
         let _ = app.emit("pickers-changed", ());
         broadcast(app);
     }
+}
+
+/// Switches the active organisation (workspace). Saves the choice, then
+/// refreshes the new scope. Queued local changes keep their own
+/// `workspace_id`, so pushes for another organisation continue normally.
+/// The delta cursor is per organisation, so the first refresh of a new
+/// scope is a full fetch. That applies deletions made while this app was
+/// looking at another organisation. The running timer is global (Toggl
+/// allows one running entry per user). It keeps running and stays visible
+/// after the switch, even when it belongs to another organisation.
+pub async fn switch_workspace(app: &AppHandle<Wry>, wid: i64) -> Result<(), TogglError> {
+    let store = {
+        let st = app.state::<AppState>();
+        let session = st.session.lock().unwrap();
+        if session.is_none() {
+            return Err(TogglError::Api {
+                status: 0,
+                body: "not connected".into(),
+            });
+        }
+        st.store.clone()
+    };
+    // The user must belong to the organisation. The cached list is the
+    // source; a fresh install during a block has no list, so accept the id.
+    if let Some(store) = store.as_ref() {
+        let known = store.workspaces();
+        if !known.is_empty() && !known.iter().any(|w| w.id == wid) {
+            return Err(TogglError::Api {
+                status: 0,
+                body: "unknown workspace".into(),
+            });
+        }
+    }
+    {
+        let st = app.state::<AppState>();
+        *st.active_workspace.lock().unwrap() = wid;
+        if let Some(store) = st.store.as_ref() {
+            store.set_setting("active_workspace", &wid.to_string());
+            // Keep the offline-start fallback in step with the choice.
+            store.set_setting("workspace_id", &wid.to_string());
+        }
+    }
+    broadcast(app);
+    // The picker lists are scoped per organisation. Tell the UI to re-read
+    // them from the cache, whether or not the fetches below run.
+    let _ = app.emit("pickers-changed", ());
+    // The new scope needs its entries and reference data. A full refresh
+    // covers deletions; the picker fetch fills projects, clients, and tags.
+    // The switch itself works from the cache, so skip the fetches when the
+    // hourly window is full or a server block is active. The poll loop
+    // catches up after the refill.
+    let headroom = app.state::<AppState>().budget.has_headroom();
+    if !headroom {
+        crate::logger::log("info", "switch: no budget headroom, cache-only switch");
+        return Ok(());
+    }
+    let r = refresh_full(app).await;
+    if let Err(TogglError::RateLimited { retry_after }) = &r {
+        // The server blocked us mid-switch. Record the block like the loop
+        // does. The switch itself succeeded from the cache, so this is not
+        // an error for the user.
+        note_rate_limit(app, *retry_after);
+        return Ok(());
+    }
+    fetch_reference_data(app).await;
+    r
 }

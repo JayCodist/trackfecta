@@ -90,7 +90,7 @@ body:
       label: Relevant logs
       description: |
         Any output from the terminal, `journalctl --user -b`, or
-        `~/.local/share/com.trackfecta.app/` if present.
+        `~/.local/share/io.github.jaycodist.trackfecta/` if present.
         **Please redact your Toggl API token before pasting.**
       render: shell
   - type: checkboxes

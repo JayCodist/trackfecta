@@ -8,6 +8,23 @@ Trackfecta is a beautiful but unofficial Toggl Track desktop client for Linux. I
 the system tray. It is built with Tauri v2 (Rust) and Svelte 5 plus Tailwind
 CSS v4.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><a href="metadata/screenshots/timer-running.png"><img src="metadata/screenshots/timer-running.png" width="240" alt="Timer with a running entry"></a><br><sub>Running entry</sub></td>
+    <td align="center"><a href="metadata/screenshots/timer-entries.png"><img src="metadata/screenshots/timer-entries.png" width="240" alt="Day-grouped entry list"></a><br><sub>Entries by day</sub></td>
+    <td align="center"><a href="metadata/screenshots/settings.png"><img src="metadata/screenshots/settings.png" width="240" alt="Settings view"></a><br><sub>Settings</sub></td>
+    <td align="center"><a href="metadata/screenshots/app-tray.png"><img src="metadata/screenshots/app-tray.png" width="240" alt="Tray menu"></a><br><sub>Tray menu</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="metadata/screenshots/timer-running-dark.png"><img src="metadata/screenshots/timer-running-dark.png" width="240" alt="Timer in dark mode"></a><br><sub>Running entry, dark</sub></td>
+    <td align="center"><a href="metadata/screenshots/timer-entries-dark.png"><img src="metadata/screenshots/timer-entries-dark.png" width="240" alt="Entry list in dark mode"></a><br><sub>Entries by day, dark</sub></td>
+    <td align="center"><a href="metadata/screenshots/settings-dark.png"><img src="metadata/screenshots/settings-dark.png" width="240" alt="Settings in dark mode"></a><br><sub>Settings, dark</sub></td>
+    <td align="center"><a href="metadata/screenshots/app-tray-dark.png"><img src="metadata/screenshots/app-tray-dark.png" width="240" alt="Tray menu in dark mode"></a><br><sub>Tray menu, dark</sub></td>
+  </tr>
+</table>
+
 - [Features](#features)
 - [Install](#install)
 - [Getting started](#getting-started)
@@ -46,6 +63,10 @@ like a traditional Linux application:
   runs, and the total for today when it is stopped.
 - Time tracked today in the window. A background sync loop keeps the data
   fresh.
+- Organisation switching. Toggl accounts can belong to several organisations
+  (workspaces). Pick one in Settings, in the Account section. Each
+  organisation keeps its own entries and pickers. A running timer keeps
+  running across the switch.
 - API-token authentication. The app checks the token against `GET /me` and
   stores it in the OS keyring. It restores the session at every start. If the
   token is rejected, the app shows the sign-in screen again.
@@ -111,7 +132,7 @@ global shortcut works on X11 only. On Wayland you still have two options:
 
 ### Flatpak and Snap
 
-Manifests exist in this repo (`flatpak/com.trackfecta.app.yml` and
+Manifests exist in this repo (`flatpak/io.github.jaycodist.trackfecta.yml` and
 `snap/snapcraft.yaml`) but are **not yet validated or published**. A tray app
 in a sandbox needs the StatusNotifier and Secret Service interfaces set up
 correctly, and store review is strict. See
@@ -124,7 +145,7 @@ welcome.
    can find the token on your
    [profile page](https://track.toggl.com/profile).
 2. The app writes the token to your system keyring (service
-   `com.trackfecta.app`). It never stores the token on disk in plain text. Your
+   `io.github.jaycodist.trackfecta`). It never stores the token on disk in plain text. Your
    session is restored automatically at every start.
 3. Click **Start**. A quick entry begins, and the tray icon shows the time
    running. Click **Stop** in the window or the tray. The tray icon then shows
@@ -188,7 +209,7 @@ To build signed artifacts locally, export `TAURI_SIGNING_PRIVATE_KEY` and
 | `.deb` | Built and signed by CI, published on Releases | `tauri-action` in `.github/workflows/release.yml` |
 | `.rpm` | Built and signed by CI, published on Releases | same |
 | AppImage | Built, signed, and self-updating | same, plus the in-app updater |
-| Flatpak | Manifest drafted, **not yet validated or on Flathub** | `flatpak/com.trackfecta.app.yml` |
+| Flatpak | Manifest drafted, **not yet validated or on Flathub** | `flatpak/io.github.jaycodist.trackfecta.yml` |
 | Snap | Recipe drafted, **not yet validated or in the Store** | `snap/snapcraft.yaml` |
 
 The Flatpak and Snap paths need the tray (StatusNotifierItem) and the keyring

@@ -124,6 +124,15 @@ impl Store {
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id   INTEGER PRIMARY KEY,
+                name TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workspace_tags (
+                workspace_id INTEGER NOT NULL,
+                name         TEXT NOT NULL,
+                PRIMARY KEY (workspace_id, name)
             );",
         )
         .ok()?;
@@ -141,6 +150,18 @@ impl Store {
             "ALTER TABLE picker_projects ADD COLUMN recent INTEGER NOT NULL DEFAULT 0",
             [],
         );
+        // Organisation support: pickers and tags are per workspace. Tags
+        // move to the new workspace_tags table (the old picker_tags had a
+        // global name key, which mixed tags between organisations).
+        let _ = conn.execute(
+            "ALTER TABLE picker_projects ADD COLUMN workspace_id INTEGER",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE clients ADD COLUMN workspace_id INTEGER",
+            [],
+        );
+        let _ = conn.execute("DROP TABLE IF EXISTS picker_tags", []);
         Some(Store {
             conn: Mutex::new(conn),
         })
@@ -196,66 +217,128 @@ impl Store {
         }
     }
 
-    /// Stores the full `GET /workspaces/{id}/projects` payload in the cached
-    /// project table. The `recent` flags stay as they are.
-    pub fn replace_projects(&self, projects: &[WorkspaceProject]) {
+    /// Stores the full `GET /workspaces` payload: the organisations the
+    /// user belongs to. The list replaces the old one, so organisations
+    /// the user left disappear. The switcher menu reads it.
+    pub fn replace_workspaces(&self, list: &[crate::toggl::Workspace]) {
+        let Ok(conn) = self.conn.lock() else { return };
+        let _ = conn.execute("DELETE FROM workspaces", []);
+        for w in list {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO workspaces(id, name) VALUES(?1,?2)",
+                params![w.id, w.name],
+            );
+        }
+    }
+
+    /// The cached organisations, alphabetical. Empty before the first
+    /// successful fetch at connect. Reading the cache uses no requests.
+    pub fn workspaces(&self) -> Vec<crate::toggl::Workspace> {
+        let Ok(conn) = self.conn.lock() else {
+            return Vec::new();
+        };
+        let Ok(mut stmt) =
+            conn.prepare("SELECT id, name FROM workspaces ORDER BY name COLLATE NOCASE")
+        else {
+            return Vec::new();
+        };
+        let rows = stmt.query_map([], |r| {
+            Ok(crate::toggl::Workspace {
+                id: r.get(0)?,
+                name: r.get(1)?,
+            })
+        });
+        rows.map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default()
+    }
+
+    /// The cached name of one organisation. None when it is not in the
+    /// cache (for example a fresh install during a quota block).
+    pub fn workspace_name(&self, id: i64) -> Option<String> {
+        let conn = self.conn.lock().ok()?;
+        conn.query_row(
+            "SELECT name FROM workspaces WHERE id = ?1",
+            params![id],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+    }
+
+    /// Stores the full `GET /workspaces/{id}/projects` payload for one
+    /// organisation. The `recent` flags stay as they are. Projects of other
+    /// organisations are untouched, so a switch back needs no re-fetch of
+    /// rows that are still current.
+    pub fn replace_projects(&self, workspace_id: i64, projects: &[WorkspaceProject]) {
         let Ok(conn) = self.conn.lock() else { return };
         for p in projects {
             let _ = conn.execute(
-                "INSERT INTO picker_projects(id, name, billable, color, client_id, recent)
-                 VALUES(?1,?2,?3,?4,?5,0)
+                "INSERT INTO picker_projects(id, name, billable, color, client_id, recent, workspace_id)
+                 VALUES(?1,?2,?3,?4,?5,0,?6)
                  ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name,
                     billable=excluded.billable,
                     color=COALESCE(excluded.color, picker_projects.color),
-                    client_id=COALESCE(excluded.client_id, picker_projects.client_id)",
+                    client_id=COALESCE(excluded.client_id, picker_projects.client_id),
+                    workspace_id=excluded.workspace_id",
                 params![
                     p.id,
                     p.name,
                     p.billable.unwrap_or(false) as i64,
                     p.color,
-                    p.client_id
+                    p.client_id,
+                    workspace_id
                 ],
             );
         }
     }
 
-    /// Replaces the cached client names (from `GET /workspaces/{id}/clients`).
-    pub fn replace_clients(&self, clients: &[Client]) {
+    /// Replaces the cached client names of one organisation (from
+    /// `GET /workspaces/{id}/clients`). Clients of other organisations stay.
+    pub fn replace_clients(&self, workspace_id: i64, clients: &[Client]) {
         let Ok(conn) = self.conn.lock() else { return };
-        let _ = conn.execute("DELETE FROM clients", []);
+        let _ = conn.execute(
+            "DELETE FROM clients WHERE workspace_id=?1 OR workspace_id IS NULL",
+            params![workspace_id],
+        );
         for c in clients {
             let _ = conn.execute(
-                "INSERT OR REPLACE INTO clients(id, name) VALUES(?1,?2)",
-                params![c.id, c.name],
+                "INSERT OR REPLACE INTO clients(id, name, workspace_id) VALUES(?1,?2,?3)",
+                params![c.id, c.name, workspace_id],
             );
         }
     }
 
-    /// Replaces the cached tag list. Source: `GET /workspaces/{id}/tags`.
-    /// This is the tag-picker source since `/me/interests` was removed
-    /// upstream.
-    pub fn replace_tags(&self, tags: &[WorkspaceTag]) {
+    /// Replaces the cached tag list of one organisation. Source:
+    /// `GET /workspaces/{id}/tags`. This is the tag-picker source since
+    /// `/me/interests` was removed upstream. Tags of other organisations
+    /// stay, and the same name in two organisations is two rows.
+    pub fn replace_tags(&self, workspace_id: i64, tags: &[WorkspaceTag]) {
         let Ok(conn) = self.conn.lock() else { return };
-        let _ = conn.execute("DELETE FROM picker_tags", []);
+        let _ = conn.execute(
+            "DELETE FROM workspace_tags WHERE workspace_id=?1",
+            params![workspace_id],
+        );
         for t in tags {
             let _ = conn.execute(
-                "INSERT OR IGNORE INTO picker_tags(name) VALUES(?1)",
-                params![t.name],
+                "INSERT OR IGNORE INTO workspace_tags(workspace_id, name) VALUES(?1,?2)",
+                params![workspace_id, t.name],
             );
         }
     }
 
-    /// The cached project ids that are not in the given set. Sync uses this
-    /// to drop projects that were deleted on the server.
-    pub fn project_ids_except(&self, keep: &[i64]) -> Vec<i64> {
+    /// The cached project ids of one organisation that are not in the given
+    /// set. Sync uses this to drop projects that were deleted on the server.
+    /// Limited to the organisation so a switch never deletes another
+    /// organisation's cached projects.
+    pub fn project_ids_except(&self, workspace_id: i64, keep: &[i64]) -> Vec<i64> {
         let Ok(conn) = self.conn.lock() else {
             return Vec::new();
         };
-        let Ok(mut stmt) = conn.prepare("SELECT id FROM picker_projects") else {
+        let Ok(mut stmt) = conn.prepare("SELECT id FROM picker_projects WHERE workspace_id=?1")
+        else {
             return Vec::new();
         };
-        stmt.query_map([], |r| r.get::<_, i64>(0))
+        stmt.query_map(params![workspace_id], |r| r.get::<_, i64>(0))
             .map(|it| {
                 it.filter_map(Result::ok)
                     .filter(|id| !keep.contains(id))
@@ -272,16 +355,18 @@ impl Store {
         }
     }
 
-    pub fn picker_projects(&self) -> Vec<PickerProject> {
+    pub fn picker_projects(&self, workspace_id: i64) -> Vec<PickerProject> {
         let Ok(conn) = self.conn.lock() else {
             return Vec::new();
         };
         // "Recent first" means the projects that cached entries actually
         // reference, newest usage first. The rest follow alphabetically.
+        // Limited to the active organisation.
         let Ok(mut stmt) = conn.prepare(
             "SELECT pp.id, pp.name, pp.billable, pp.color, c.name
              FROM picker_projects pp
              LEFT JOIN clients c ON c.id = pp.client_id
+             WHERE pp.workspace_id = ?1
              ORDER BY (SELECT MAX(te.start_ts) FROM time_entries te
                         WHERE te.project_id = pp.id AND te.deleted = 0) DESC,
                       pp.recent DESC,
@@ -289,7 +374,7 @@ impl Store {
         ) else {
             return Vec::new();
         };
-        let rows = stmt.query_map([], |r| {
+        let rows = stmt.query_map(params![workspace_id], |r| {
             Ok(PickerProject {
                 id: r.get(0)?,
                 name: r.get(1)?,
@@ -302,16 +387,16 @@ impl Store {
             .unwrap_or_default()
     }
 
-    pub fn picker_tags(&self) -> Vec<String> {
+    pub fn picker_tags(&self, workspace_id: i64) -> Vec<String> {
         let Ok(conn) = self.conn.lock() else {
             return Vec::new();
         };
-        let Ok(mut stmt) =
-            conn.prepare("SELECT name FROM picker_tags ORDER BY name COLLATE NOCASE")
-        else {
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT name FROM workspace_tags WHERE workspace_id=?1 ORDER BY name COLLATE NOCASE",
+        ) else {
             return Vec::new();
         };
-        let rows = stmt.query_map([], |r| r.get::<_, String>(0));
+        let rows = stmt.query_map(params![workspace_id], |r| r.get::<_, String>(0));
         rows.map(|it| it.filter_map(Result::ok).collect())
             .unwrap_or_default()
     }
@@ -572,10 +657,11 @@ impl Store {
             .unwrap_or_default()
     }
 
-    /// All cached entries with a start at or after `from_ts`, without the
-    /// deleted rows, newest first. Joined against the cached picker list, so
-    /// each row carries its project name for the colored label.
-    pub fn entries_since(&self, from_ts: i64) -> Vec<EntryRow> {
+    /// All cached entries of one organisation with a start at or after
+    /// `from_ts`, without the deleted rows, newest first. Joined against the
+    /// cached picker list, so each row carries its project name for the
+    /// colored label. Entries of other organisations are not listed.
+    pub fn entries_since(&self, workspace_id: i64, from_ts: i64) -> Vec<EntryRow> {
         let Ok(conn) = self.conn.lock() else {
             return Vec::new();
         };
@@ -585,20 +671,23 @@ impl Store {
              FROM time_entries e
              LEFT JOIN picker_projects p ON p.id = e.project_id
              LEFT JOIN clients c ON c.id = p.client_id
-             WHERE e.deleted=0 AND e.start_ts >= ?1
+             WHERE e.deleted=0 AND e.workspace_id=?2 AND e.start_ts >= ?1
              ORDER BY e.start_ts DESC",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
-        let rows = stmt.query_map(params![from_ts], read_entry_row);
+        let rows = stmt.query_map(params![from_ts, workspace_id], read_entry_row);
         rows.map(|it| it.filter_map(Result::ok).collect())
             .unwrap_or_default()
     }
 
-    /// The open (running) entry from the cache, when there is one. The cache
-    /// is the authority for "is something running". A delta poll does not
-    /// re-send the running entry once its `updated_at` is behind the cursor.
+    /// The open (running) entry from the cache, when there is one, in any
+    /// organisation. Toggl allows one running timer per user, so the running
+    /// row is global. It stays visible and stoppable after a workspace
+    /// switch. The cache is the authority for "is something running". A
+    /// delta poll does not re-send the running entry once its `updated_at`
+    /// is behind the cursor.
     pub fn open_entry(&self) -> Option<EntryRow> {
         let conn = self.conn.lock().ok()?;
         conn.query_row(
@@ -615,10 +704,10 @@ impl Store {
         .ok()
     }
 
-    /// The most recent STOPPED entry from the cache. This is what the tray
-    /// "Resume last entry" item reuses when no timer is running. Reading the
-    /// cache uses no API requests.
-    pub fn last_stopped_entry(&self) -> Option<EntryRow> {
+    /// The most recent STOPPED entry of one organisation from the cache.
+    /// This is what the tray "Resume last entry" item reuses when no timer
+    /// is running. Reading the cache uses no API requests.
+    pub fn last_stopped_entry(&self, workspace_id: i64) -> Option<EntryRow> {
         let conn = self.conn.lock().ok()?;
         conn.query_row(
             "SELECT e.id, e.workspace_id, e.description, e.start_ts, e.stop_ts, e.duration,
@@ -626,9 +715,9 @@ impl Store {
              FROM time_entries e
              LEFT JOIN picker_projects p ON p.id = e.project_id
              LEFT JOIN clients c ON c.id = p.client_id
-             WHERE e.deleted=0 AND e.stop_ts IS NOT NULL
+             WHERE e.deleted=0 AND e.workspace_id=?1 AND e.stop_ts IS NOT NULL
              ORDER BY e.stop_ts DESC LIMIT 1",
-            [],
+            params![workspace_id],
             read_entry_row,
         )
         .ok()

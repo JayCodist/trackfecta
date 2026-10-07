@@ -2,7 +2,7 @@
 
 use keyring::Entry;
 
-const SERVICE: &str = "com.trackfecta.app";
+const SERVICE: &str = "io.github.jaycodist.trackfecta";
 const USER: &str = "toggl_api_token";
 fn entry() -> Result<Entry, keyring::Error> {
     Entry::new(SERVICE, USER)

@@ -70,3 +70,33 @@ jobs:
       - name: cargo test
         run: cargo test
         working-directory: src-tauri
+
+  metadata:
+    name: App metadata (metainfo, screenshots)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install appstream
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends appstream
+
+      - name: Validate metainfo
+        run: appstreamcli validate --no-net metadata/*.metainfo.xml
+
+      - name: Check referenced screenshots exist
+        run: |
+          refs=$(grep -ho 'metadata/screenshots/[^<]*\.png' metadata/*.metainfo.xml | sort -u)
+          if [ -z "$refs" ]; then
+            echo "The metainfo references no screenshots."
+            exit 1
+          fi
+          rc=0
+          for r in $refs; do
+            if [ ! -f "$r" ]; then
+              echo "Missing screenshot: $r"
+              rc=1
+            fi
+          done
+          exit $rc

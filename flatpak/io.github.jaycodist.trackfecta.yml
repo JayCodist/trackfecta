@@ -12,7 +12,12 @@
 # Then build with flatpak-builder. Flathub review is strict about D-Bus names
 # and filesystem grants, so expect a round of edits before it passes. See the
 # README, "Packaging status".
-app-id: com.trackfecta.app
+#
+# The app id is a code-hosting id (io.github.<user>.<repo>) because Flathub
+# requires control over the domain a com.* id implies, and ids must not end in
+# generic terms like ".app". It matches src-tauri/tauri.conf.json "identifier"
+# and the metainfo id in metadata/.
+app-id: io.github.jaycodist.trackfecta
 runtime: org.gnome.Platform
 runtime-version: '49'
 sdk: org.gnome.Sdk
@@ -47,11 +52,11 @@ finish-args:
   # Sleep and shutdown events: systemd logind on the system bus.
   - --system-talk-name=org.freedesktop.login1
   # Single instance: the plugin owns <id>.SingleInstance on the session bus.
-  - --own-name=com.trackfecta.app.SingleInstance
+  - --own-name=io.github.jaycodist.trackfecta.SingleInstance
   # Open external links (web app, reports) through the Desktop portal.
   - --talk-name=org.freedesktop.portal.Desktop
   # App data: SQLite cache, logs, and settings.
-  - --filesystem=xdg-data/com.trackfecta.app
+  - --filesystem=xdg-data/io.github.jaycodist.trackfecta
   # Autostart writes ~/.config/autostart/. Under Flatpak the desktop entry
   # must call the sandbox run command for this to have any effect.
   - --filesystem=xdg-config/autostart
@@ -107,11 +112,11 @@ modules:
       # requires <app-id>.desktop. Rename it and fix Exec/Icon.
       - |
         src=$(ls extracted/usr/share/applications/*.desktop | head -n1)
-        install -Dm644 "$src" /app/share/applications/com.trackfecta.app.desktop
+        install -Dm644 "$src" /app/share/applications/io.github.jaycodist.trackfecta.desktop
         desktop-file-edit --set-key=Exec --set-value=trackfecta \
-          /app/share/applications/com.trackfecta.app.desktop
-        desktop-file-edit --set-key=Icon --set-value=com.trackfecta.app \
-          /app/share/applications/com.trackfecta.app.desktop
+          /app/share/applications/io.github.jaycodist.trackfecta.desktop
+        desktop-file-edit --set-key=Icon --set-value=io.github.jaycodist.trackfecta \
+          /app/share/applications/io.github.jaycodist.trackfecta.desktop
       # Icons at every size the bundle ships, renamed to the app-id so the
       # desktop entry resolves them inside the sandbox.
       - |
@@ -119,11 +124,16 @@ modules:
           [ -e "$f" ] || continue
           size=$(basename "$(dirname "$(dirname "$f")")")
           install -Dm644 "$f" \
-            "/app/share/icons/hicolor/$size/apps/com.trackfecta.app.png"
+            "/app/share/icons/hicolor/$size/apps/io.github.jaycodist.trackfecta.png"
         done
-      # Metainfo, if the bundle generated one. Rename to the app-id.
-      - |
-        m=$(ls extracted/usr/share/metainfo/*.xml 2>/dev/null | head -n1)
-        if [ -n "$m" ]; then
-          install -Dm644 "$m" /app/share/metainfo/com.trackfecta.app.metainfo.xml
-        fi
+      # Scalable icon. Flathub prefers an SVG, and the upstream logo is one.
+      - install -Dm644 src-tauri/icons/trackfecta-logo.svg
+        /app/share/icons/hicolor/scalable/apps/io.github.jaycodist.trackfecta.svg
+      # Metainfo ships in the upstream repo (metadata/), as Flathub requires.
+      # The Tauri bundler does not generate one, so install it from source.
+      - install -Dm644 metadata/io.github.jaycodist.trackfecta.metainfo.xml
+        /app/share/metainfo/io.github.jaycodist.trackfecta.metainfo.xml
+      # License file, per Flathub policy. flatpak-builder's automatic
+      # license-files handling does not apply to a simple buildsystem.
+      - install -Dm644 LICENSE
+        /app/share/licenses/io.github.jaycodist.trackfecta/LICENSE

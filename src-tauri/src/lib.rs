@@ -105,10 +105,14 @@ fn logout(app: tauri::AppHandle<Wry>) {
 /// requests. The UI groups them by day: Today, Yesterday, and dates.
 #[tauri::command]
 fn get_entries(state: tauri::State<'_, AppState>) -> Vec<EntryRow> {
+    let wid = *state.active_workspace.lock().unwrap();
+    if wid == 0 {
+        return Vec::new();
+    }
     state
         .store
         .as_ref()
-        .map(|s| s.entries_since(state::start_of_window(state::window_days(Some(s)))))
+        .map(|s| s.entries_since(wid, state::start_of_window(state::window_days(Some(s)))))
         .unwrap_or_default()
 }
 
@@ -125,32 +129,63 @@ fn extend_window(app: tauri::AppHandle<Wry>) -> Result<(), String> {
     store.set_setting("window_days", &next.to_string());
     // Put the delta cursor back to the start of the new window. The wider
     // fetch re-transfers the older rows. Upsert of a row already in the
-    // cache does not change it.
+    // cache does not change it. The cursor is per organisation.
     let start = state::start_of_window(next);
-    store.set_meta("last_sync", start);
+    let wid = *st.active_workspace.lock().unwrap();
+    store.set_meta(&format!("last_sync:{wid}"), start);
     broadcast(&app);
     app.state::<AppState>().wakeup.notify_one();
     Ok(())
 }
 
 /// Gives the cached workspace projects, with colors and client names. This
-/// uses no API requests.
+/// uses no API requests. Limited to the active organisation.
 #[tauri::command]
 fn get_picker_projects(state: tauri::State<'_, AppState>) -> Vec<PickerProject> {
+    let wid = *state.active_workspace.lock().unwrap();
+    if wid == 0 {
+        return Vec::new();
+    }
     state
         .store
         .as_ref()
-        .map(|s| s.picker_projects())
+        .map(|s| s.picker_projects(wid))
         .unwrap_or_default()
 }
 
 #[tauri::command]
 fn get_picker_tags(state: tauri::State<'_, AppState>) -> Vec<String> {
+    let wid = *state.active_workspace.lock().unwrap();
+    if wid == 0 {
+        return Vec::new();
+    }
     state
         .store
         .as_ref()
-        .map(|s| s.picker_tags())
+        .map(|s| s.picker_tags(wid))
         .unwrap_or_default()
+}
+
+/// Gives the cached organisations (workspaces) the user belongs to. The
+/// switcher menu calls this. Reading the cache uses no API requests; the
+/// list is fetched once per session at connect.
+#[tauri::command]
+fn get_workspaces(state: tauri::State<'_, AppState>) -> Vec<toggl::Workspace> {
+    state
+        .store
+        .as_ref()
+        .map(|s| s.workspaces())
+        .unwrap_or_default()
+}
+
+/// Switches the active organisation (workspace). The entry list, pickers,
+/// and totals are reloaded for it. Queued local changes of another
+/// organisation are untouched and keep syncing in the background.
+#[tauri::command]
+async fn switch_workspace(app: tauri::AppHandle<Wry>, workspace_id: i64) -> Result<(), String> {
+    sync::switch_workspace(&app, workspace_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Gives the recent log lines for the Diagnostics section in Settings.
@@ -203,17 +238,22 @@ struct AppSettings {
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle<Wry>) -> AppSettings {
     let st = app.state::<AppState>();
-    let default_project_id = st
+    let wid = *st.active_workspace.lock().unwrap();
+    let saved_default = st
         .store
         .as_ref()
         .and_then(|s| s.get_setting("default_project"))
         .and_then(|v| v.parse::<i64>().ok());
-    let default_project_name = default_project_id.and_then(|id| {
+    // A default project belongs to the organisation where it was chosen.
+    // Offer it only when the project exists in the active organisation.
+    // The picker list is cached per organisation, so this uses no requests.
+    let default_project = saved_default.and_then(|id| {
         st.store
             .as_ref()
-            .and_then(|s| s.picker_projects().into_iter().find(|p| p.id == id))
-            .map(|p| p.name)
+            .and_then(|s| s.picker_projects(wid).into_iter().find(|p| p.id == id))
     });
+    let default_project_id = default_project.as_ref().map(|p| p.id);
+    let default_project_name = default_project.map(|p| p.name);
     let theme = st
         .store
         .as_ref()
@@ -438,6 +478,8 @@ fn resolve_idle(app: tauri::AppHandle<Wry>, action: String) -> Result<(), String
     let Some(store) = st.store.as_ref() else {
         return Err("cache unavailable".into());
     };
+    // The running row is global (any organisation). The idle prompt always
+    // targets the entry this user is running.
     let Some(row) = store.open_entry() else {
         // The timer stopped while the dialog was open. Nothing to fix.
         return Ok(());
@@ -602,22 +644,18 @@ fn toggle_timer(app: &AppHandle<Wry>) {
 
 // ---------- core operations (shared by the tray and the commands) ----------
 
-/// The default workspace id for the active session. Start and the manual
-/// create need it. When there is no live session, fall back to the id
-/// saved at the last successful connect. A quota block or a network
-/// failure must not stop local tracking: the entry goes into the cache
-/// with the dirty flag, and the sync loop pushes it when the window opens.
-/// The error only covers a fresh install that never connected.
+/// The active organisation id. Start and the manual create need it. When
+/// there is no live session, fall back to the id saved at the last
+/// successful connect. A quota block or a network failure must not stop
+/// local tracking: the entry goes into the cache with the dirty flag, and
+/// the sync loop pushes it when the window opens. The error only covers a
+/// fresh install that never connected.
 fn require_workspace(app: &AppHandle<Wry>) -> Result<i64, String> {
-    let wid = {
-        let st = app.state::<AppState>();
-        let guard = st.session.lock().unwrap();
-        guard.as_ref().map(|s| s.user.default_workspace_id)
-    };
-    if let Some(wid) = wid {
-        return Ok(wid);
-    }
     let st = app.state::<AppState>();
+    let active = *st.active_workspace.lock().unwrap();
+    if active != 0 {
+        return Ok(active);
+    }
     let saved = st
         .store
         .as_ref()
@@ -703,7 +741,8 @@ pub(crate) fn do_stop(app: &AppHandle<Wry>) -> Result<(), String> {
     let entry_id = match *st.entry_id.lock().unwrap() {
         Some(id) => id,
         // The entry is not on the server yet. The running row is in the
-        // cache with its temporary id.
+        // cache with its temporary id. The running row is global, so it can
+        // live in another organisation after a workspace switch.
         None => st
             .store
             .as_ref()
@@ -826,6 +865,20 @@ pub fn run() {
             {
                 app.state::<AppState>().budget.set_max(cap);
             }
+            // Restore the organisation the user last chose. The connect
+            // step checks it against the live membership list, so a stale
+            // id (an organisation the user left) falls back to the account
+            // default. Without this, the first cached reads would run with
+            // no scope at all.
+            if let Some(wid) = app
+                .state::<AppState>()
+                .store
+                .as_ref()
+                .and_then(|s| s.get_setting("active_workspace"))
+                .and_then(|v| v.parse::<i64>().ok())
+            {
+                *app.state::<AppState>().active_workspace.lock().unwrap() = wid;
+            }
             // A restart clears the in-memory window, so restore a quota
             // block the previous run recorded. Without this, a restart
             // during a block immediately spends requests and re-hits the
@@ -869,6 +922,19 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().0.as_str() {
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
+                            show_window(&w);
+                        }
+                    }
+                    // The top status item is the primary action. While a
+                    // timer runs its text reads "Stop: <desc>", so clicking
+                    // it stops. When idle it shows the day total, so clicking
+                    // it opens the window.
+                    "status" => {
+                        let running =
+                            app.state::<AppState>().timer.lock().unwrap().running;
+                        if running {
+                            let _ = do_stop(app);
+                        } else if let Some(w) = app.get_webview_window("main") {
                             show_window(&w);
                         }
                     }
@@ -971,6 +1037,8 @@ pub fn run() {
             get_picker_tags,
             get_settings,
             set_setting,
+            get_workspaces,
+            switch_workspace,
             update_entry,
             delete_entry,
             create_entry,

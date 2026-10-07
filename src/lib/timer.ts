@@ -46,6 +46,13 @@ export type LastEntry = {
   billable: boolean;
 };
 
+/** One organisation (workspace) the user belongs to. Mirrors the Rust
+ * Workspace. The switcher lists these. */
+export type Workspace = {
+  id: number;
+  name: string;
+};
+
 /** Local settings snapshot. Mirrors the Rust AppSettings. */
 export type AppSettings = {
   hourlyCap: number;
@@ -96,6 +103,10 @@ export type TimerState = {
   nextSyncIn: number;
   /** Idle backend in use: "gnome", "kde", or "none". */
   idleBackend: string;
+  /** Active organisation (workspace) id. 0 before the first connect. */
+  workspaceId: number;
+  /** Cached name of the active organisation, when known. */
+  workspaceName: string | null;
 };
 
 export const EMPTY: TimerState = {
@@ -109,6 +120,8 @@ export const EMPTY: TimerState = {
   blocked: false,
   nextSyncIn: 0,
   idleBackend: "",
+  workspaceId: 0,
+  workspaceName: null,
 };
 
 /**

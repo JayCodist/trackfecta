@@ -7,7 +7,15 @@
     enable as enableAutostart,
     isEnabled,
   } from "@tauri-apps/plugin-autostart";
-  import { projectColor, applyTheme, dotColor, fmtWait, type ProjectOption, type TimerState } from "./timer";
+  import {
+    projectColor,
+    applyTheme,
+    dotColor,
+    fmtWait,
+    type ProjectOption,
+    type TimerState,
+    type Workspace,
+  } from "./timer";
   import Dropdown, { type DropdownOption } from "./Dropdown.svelte";
   import Icons from "./Icons.svelte";
 
@@ -49,6 +57,48 @@
   let tokenBusy = $state(false);
   let note = $state<string | null>(null);
   let error = $state<string | null>(null);
+
+  // Organisations (workspaces) the user belongs to. The Account section
+  // lists them in a dropdown. Reading the cache uses no requests; the Rust
+  // side fetches the list once per session at connect. The row appears only
+  // when there is more than one organisation to choose from.
+  let workspaces = $state<Workspace[]>([]);
+  let switching = $state(false);
+
+  async function loadWorkspaces() {
+    try {
+      workspaces = await invoke<Workspace[]>("get_workspaces");
+    } catch {
+      /* An unavailable cache keeps the list empty. */
+    }
+  }
+  $effect(() => {
+    void loadWorkspaces();
+  });
+
+  /** Switches the active organisation. The Rust side reloads the entries,
+   * pickers, and totals for the new scope, and the timer-state broadcast
+   * lands in the parent. A running timer keeps running: it belongs to the
+   * user, not to the view. */
+  async function switchOrg(v: string) {
+    const id = Number(v);
+    if (id === timer.workspaceId || switching) return;
+    switching = true;
+    error = null;
+    note = null;
+    try {
+      await invoke("switch_workspace", { workspaceId: id });
+      loadWorkspaces();
+      // The default project and the picker lists are scoped per
+      // organisation. Reload them so the Account row matches the new scope.
+      void loadSettings();
+      note = "Organisation switched.";
+    } catch (e) {
+      error = String(e);
+    } finally {
+      switching = false;
+    }
+  }
 
   // Diagnostics: the recent log lines, for bug reports and crash analysis.
   let diag = $state<{ logTail: string; logPath: string } | null>(null);
@@ -153,37 +203,42 @@
   });
 
   $effect(() => {
-    invoke<{
-      hourlyCap: number;
-      defaultProjectId: number | null;
-      theme: string;
-      trayShowSeconds: boolean;
-      stopOnSleep: boolean;
-      idleEnabled: boolean;
-      idleThresholdMin: number;
-      hotkey: string;
-      hotkeyEnabled: boolean;
-      wayland: boolean;
-    }>("get_settings")
-      .then((s) => {
-        capDraft = String(s.hourlyCap);
-        savedCap = s.hourlyCap;
-        defaultProjectId = s.defaultProjectId;
-        theme = s.theme ?? "system";
-        traySeconds = s.trayShowSeconds ?? false;
-        stopOnSleep = s.stopOnSleep ?? true;
-        idleEnabled = s.idleEnabled ?? true;
-        idleMin = String(s.idleThresholdMin ?? 5);
-        hotkey = s.hotkey ?? "CommandOrControl+Alt+D";
-        recHotkey = hotkey;
-        hotkeyEnabled = s.hotkeyEnabled ?? true;
-        wayland = s.wayland ?? false;
-      })
-      .catch(() => {});
+    loadSettings();
     isEnabled()
       .then((v) => (autostart = v))
       .catch(() => {});
   });
+
+  async function loadSettings() {
+    try {
+      const s = await invoke<{
+        hourlyCap: number;
+        defaultProjectId: number | null;
+        theme: string;
+        trayShowSeconds: boolean;
+        stopOnSleep: boolean;
+        idleEnabled: boolean;
+        idleThresholdMin: number;
+        hotkey: string;
+        hotkeyEnabled: boolean;
+        wayland: boolean;
+      }>("get_settings");
+      capDraft = String(s.hourlyCap);
+      savedCap = s.hourlyCap;
+      defaultProjectId = s.defaultProjectId;
+      theme = s.theme ?? "system";
+      traySeconds = s.trayShowSeconds ?? false;
+      stopOnSleep = s.stopOnSleep ?? true;
+      idleEnabled = s.idleEnabled ?? true;
+      idleMin = String(s.idleThresholdMin ?? 5);
+      hotkey = s.hotkey ?? "CommandOrControl+Alt+D";
+      recHotkey = hotkey;
+      hotkeyEnabled = s.hotkeyEnabled ?? true;
+      wayland = s.wayland ?? false;
+    } catch {
+      /* Keep the current values if the read fails. */
+    }
+  }
 
   async function saveCap() {
     const n = Number(capDraft);
@@ -514,6 +569,29 @@
   <div>
     <h3 class="set-title">Account</h3>
     <div class="set-group">
+      {#if workspaces.length > 1}
+        <div class="set-row">
+          <div class="set-main">
+            <div class="set-label">Organisation</div>
+            <div class="set-hint">
+              The workspace your entries and projects belong to. A running
+              timer keeps running when you switch.
+            </div>
+          </div>
+          <div class="set-ctl">
+            <Dropdown
+              options={workspaces.map((w) => ({
+                value: String(w.id),
+                label: w.name,
+              }))}
+              value={String(timer.workspaceId)}
+              placeholder="Organisation"
+              icon="briefcase"
+              onChange={(v) => switchOrg(v)}
+            />
+          </div>
+        </div>
+      {/if}
       <div class="set-row">
         <div class="set-main">
           <div class="set-label">API token</div>
@@ -780,19 +858,25 @@
             pool; raise the cap to match your plan and sync more aggressively.
           </div>
           <div class="quota-line">
-            <span
-              class="quota-dot"
-              class:low={timer.status === "connected" && timer.requestsLeft <= 3}
-            ></span>
-            {timer.requestsLeft} left this hour (of {savedCap})
-            {#if timer.blocked}
-              · next sync in {fmtWait(timer.nextSyncIn)}
-            {/if}
+            <span class="quota-status">
+              <span
+                class="quota-dot"
+                class:low={timer.blocked || timer.requestsLeft <= 3}
+              ></span>
+              {#if timer.blocked}
+                API limit reached. Sync resumes in {fmtWait(timer.nextSyncIn)}.
+              {:else if timer.requestsLeft <= 0}
+                All {savedCap} requests used this hour. Next slot frees in{" "}
+                {fmtWait(timer.nextSyncIn)}.
+              {:else}
+                {timer.requestsLeft} of {savedCap} requests left this hour.
+              {/if}
+            </span>
             <button
               class="btn sync"
               title={canSync
-                ? "Sync now (spends 1 request)"
-                : "No API quota left this hour"}
+                ? "Sync now (uses 1 request)"
+                : "No API requests left this hour"}
               disabled={!canSync || syncing}
               onclick={syncNow}
             >
