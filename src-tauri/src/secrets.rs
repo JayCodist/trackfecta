@@ -30,7 +30,9 @@ pub fn set_token(token: &str) -> Result<(), String> {
 /// Everything else passes through verbatim.
 fn friendly_keyring_error(e: &keyring::Error) -> String {
     let msg = e.to_string();
-    if msg.contains("PermissionDenied") {
+    // A disconnected `password-manager-service` plug surfaces as an AppArmor
+    // D-Bus denial (not PermissionDenied, which is the keyutils backend).
+    if msg.contains("PermissionDenied") || msg.contains("AppArmor policy") {
         return format!(
             "The system keyring is not reachable from this sandbox. \
              If you installed Trackfecta as a snap, run \n\n  \
@@ -39,7 +41,10 @@ fn friendly_keyring_error(e: &keyring::Error) -> String {
             msg
         );
     }
-    if msg.contains("NoService") || msg.contains("Service not found") {
+    if msg.contains("NoService")
+        || msg.contains("Service not found")
+        || msg.contains("ServiceUnknown")
+    {
         return format!(
             "No secret-service provider was found on this system. \
              Trackfecta stores its token in the freedesktop Secret Service \
