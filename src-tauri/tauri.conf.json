@@ -42,17 +42,17 @@
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"],
         "files": {
-          "usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
+          "/usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
         }
       },
       "rpm": {
         "files": {
-          "usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
+          "/usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
         }
       },
       "appimage": {
         "files": {
-          "usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
+          "/usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
         }
       }
     },
