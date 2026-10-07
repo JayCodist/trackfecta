@@ -596,7 +596,8 @@
         <div class="set-main">
           <div class="set-label">API token</div>
           <div class="set-hint">
-            Stored in your system keyring. Find it on your
+            Stored securely on this device (system keyring when available). Find
+            it on your
             <a
               class="link"
               href="https://track.toggl.com/profile"

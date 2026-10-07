@@ -45,7 +45,11 @@ fn get_idle_pending(state: tauri::State<'_, AppState>) -> Option<state::PendingI
 #[tauri::command]
 async fn set_api_token(app: tauri::AppHandle<Wry>, token: String) -> Result<(), String> {
     let token = token.trim().to_string();
-    secrets::set_token(&token)?;
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not resolve the app data directory: {}", e))?;
+    secrets::set_token(&data_dir, &token)?;
     *app.state::<AppState>().token.lock().unwrap() = Some(token.clone());
     sync::connect(&app, token).await.map_err(|e| e.to_string())
 }
@@ -92,7 +96,9 @@ async fn sync_now(app: tauri::AppHandle<Wry>) -> Result<(), String> {
 /// screen.
 #[tauri::command]
 fn logout(app: tauri::AppHandle<Wry>) {
-    secrets::delete_token();
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        secrets::delete_token(&data_dir);
+    }
     {
         let st = app.state::<AppState>();
         *st.token.lock().unwrap() = None;
@@ -978,7 +984,9 @@ pub fn run() {
             // cached token by itself. While a quota block is active, skip the
             // attempt: GET /me is itself a request and would only re-hit the
             // limit. The loop retries on its own after the block lifts.
-            if let Some(token) = secrets::get_token() {
+            let data_dir = app.path().app_data_dir().ok();
+            let token = data_dir.as_ref().and_then(|dir| secrets::get_token(dir));
+            if let Some(token) = token {
                 *app.state::<AppState>().token.lock().unwrap() = Some(token.clone());
                 let blocked = !app.state::<AppState>().budget.until_blocked().is_zero();
                 if !blocked {
