@@ -1081,6 +1081,9 @@ a.link:hover {
   margin: 0;
   font-size: 13px;
   color: var(--accent);
+  /* Keyring errors embed a copyable `sudo snap connect …` command with
+     newlines and leading spaces; keep them laid out as written. */
+  white-space: pre-wrap;
 }
 .quota {
   font-size: 12px;

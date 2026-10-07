@@ -21,7 +21,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
-keyring = { version = "3", features = ["linux-native"] }
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
