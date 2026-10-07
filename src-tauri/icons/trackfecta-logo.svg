@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="512" height="512" role="img" aria-label="Stopwatch with shell prompt">
   <rect width="200" height="200" rx="44" fill="transparent"/>
-  <g transform="translate(0 -3)">
+  <!-- 1.13924 = 180/158: scales the mark's bbox (132x158, centered on 100,100)
+       to fill 90% of the canvas height, matching neighboring app icons. -->
+  <g transform="translate(100 100) scale(1.13924) translate(-100 -103)">
     <rect x="88" y="24" width="24" height="13" rx="4" fill="#dd3873"/>
     <rect x="94" y="35" width="12" height="14" fill="#dd3873"/>
     <g transform="rotate(46 100 116)"><rect x="93" y="36" width="14" height="12" rx="3" fill="#dd3873"/></g>

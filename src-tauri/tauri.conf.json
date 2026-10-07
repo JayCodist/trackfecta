@@ -31,14 +31,29 @@
     "targets": ["deb", "appimage", "rpm"],
     "icon": [
       "icons/32x32.png",
+      "icons/64x64.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/icon.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ],
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"]
+        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"],
+        "files": {
+          "usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
+        }
+      },
+      "rpm": {
+        "files": {
+          "usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
+        }
+      },
+      "appimage": {
+        "files": {
+          "usr/share/icons/hicolor/scalable/apps/trackfecta.svg": "icons/trackfecta-logo.svg"
+        }
       }
     },
     "shortDescription": "Unofficial Toggl Track desktop client",
