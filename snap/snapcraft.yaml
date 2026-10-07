@@ -19,7 +19,7 @@ title: Trackfecta
 # root) at upload time. Without it the store shows a generic placeholder.
 icon: src-tauri/icons/icon.png
 version: "1.0.0"
-summary: Unofficial Toggl Track desktop client for Linux
+summary: Beautiful but unofficial Toggl Track desktop client for Linux
 # These four sync to the "More links" section of the store listing.
 website: https://github.com/JayCodist/trackfecta
 source-code: https://github.com/JayCodist/trackfecta
@@ -35,9 +35,13 @@ grade: stable
 # reach the session bus under strict, change this to `classic`.
 confinement: strict
 base: core24
-architectures:
-  - build-on: amd64
-  - build-on: arm64
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
+  arm64:
+    build-on: [arm64]
+    build-for: [arm64]
 
 environment:
   # WebKitGTK: disable the DMABUF renderer on systems where it crashes the
@@ -51,6 +55,13 @@ apps:
     common-id: io.github.jaycodist.trackfecta
     extensions:
       - gnome
+    # The gnome extension already assigns desktop, desktop-legacy, gsettings,
+    # opengl, wayland and x11. These are the only extras this app needs, listed
+    # explicitly on the app (not implicitly via the global plugs: stanza).
+    plugs:
+      - home
+      - unity7
+      - password-manager-service
 
 parts:
   trackfecta:
@@ -58,6 +69,7 @@ parts:
     build-packages:
       - curl
       - file
+      - git
       - libwebkit2gtk-4.1-dev
       - libayatana-appindicator3-dev
       - librsvg2-dev
@@ -65,8 +77,8 @@ parts:
       - pkg-config
       - build-essential
       - libssl-dev
-      - nodejs
-      - npm
+    build-snaps:
+      - node@24/stable
     stage-packages:
       - libwebkit2gtk-4.1-0
       - libayatana-appindicator3-1
@@ -90,12 +102,28 @@ parts:
       ( cd src-tauri/target/release/bundle/deb && ar x ./*.deb )
       tar -xf src-tauri/target/release/bundle/deb/data.tar.* \
         -C "$CRAFT_PART_INSTALL"
-      # The deb binary is named after productName, not the crate. Rename it to
-      # the fixed name the app command uses.
-      ( cd "$CRAFT_PART_INSTALL/usr/bin" && mv "$(ls | head -n1)" trackfecta )
+      # Normalise the bundled executable to the fixed command name the app
+      # uses. Tauri may ship it under the Cargo bin name ("trackfecta") or the
+      # productName ("Trackfecta"). Handle both and fail loudly if neither is
+      # present. (The old `mv "$(ls | head -n1)" trackfecta` could pick the
+      # wrong file, and errored on `mv trackfecta trackfecta` when the deb
+      # already used the crate name.)
+      if [ -e "$CRAFT_PART_INSTALL/usr/bin/Trackfecta" ]; then
+        mv "$CRAFT_PART_INSTALL/usr/bin/Trackfecta" \
+           "$CRAFT_PART_INSTALL/usr/bin/trackfecta"
+      elif [ ! -e "$CRAFT_PART_INSTALL/usr/bin/trackfecta" ]; then
+        echo "ERROR: no trackfecta/Trackfecta binary in the deb's usr/bin:" >&2
+        ls -l "$CRAFT_PART_INSTALL/usr/bin" >&2
+        exit 1
+      fi
       # Rename the desktop entry to the common-id so the launcher resolves it.
-      ( cd "$CRAFT_PART_INSTALL/usr/share/applications" \
-        && for d in ./*.desktop; do mv "$d" io.github.jaycodist.trackfecta.desktop; done )
+      # Match the single .desktop the deb installs; skip if already correct.
+      appdir="$CRAFT_PART_INSTALL/usr/share/applications"
+      desktop="$(find "$appdir" -maxdepth 1 -name '*.desktop' -print -quit)"
+      if [ -n "$desktop" ] && \
+         [ "$desktop" != "$appdir/io.github.jaycodist.trackfecta.desktop" ]; then
+        mv "$desktop" "$appdir/io.github.jaycodist.trackfecta.desktop"
+      fi
       # Metainfo ships in the repo (metadata/). The deb bundle has none, so
       # install it here. The gnome extension validates it against the desktop
       # file id.
@@ -105,15 +133,3 @@ parts:
       install -Dm644 src-tauri/icons/trackfecta-logo.svg \
         "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/io.github.jaycodist.trackfecta.svg"
 
-plugs:
-  # Secret Service for the API token.
-  password-manager-service:
-  # Tray (StatusNotifierItem) and idle (ScreenSaver / Mutter) over the session
-  # and system bus. These are the usual Snap review friction points.
-  desktop:
-  desktop-legacy:
-  unity7:
-  wayland:
-  x11:
-  opengl:
-  home:
