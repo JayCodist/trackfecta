@@ -19,6 +19,7 @@ title: Trackfecta
 # root) at upload time. Without it the store shows a generic placeholder.
 icon: src-tauri/icons/icon.png
 version: "1.0.0"
+license: MIT
 summary: Beautiful but unofficial Toggl Track desktop client for Linux
 # These four sync to the "More links" section of the store listing.
 website: https://github.com/JayCodist/trackfecta
@@ -153,4 +154,8 @@ parts:
       # Scalable icon, named after the desktop id so the launcher resolves it.
       install -Dm644 src-tauri/icons/trackfecta-logo.svg \
         "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/io.github.jaycodist.trackfecta.svg"
+      # The deb's desktop file references Icon=trackfecta; ship the same SVG
+      # under that name too so the launcher icon resolves in every DE.
+      install -Dm644 src-tauri/icons/trackfecta-logo.svg \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/trackfecta.svg"
 

@@ -25,3 +25,7 @@ ideation/
 *.deb
 *.rpm
 result/
+
+# Snap packaging output (snapcraft remote-build downloads these here)
+*.snap
+snapcraft-trackfecta-*.txt
