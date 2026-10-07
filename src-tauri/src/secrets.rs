@@ -26,6 +26,7 @@ pub fn set_token(token: &str) -> Result<(), String> {
 ///     (it is a manual-connect interface). Denied → show the fix command.
 ///   * No Secret Service provider exists at all (minimal window
 ///     managers without gnome-keyring/KWallet). Nothing to connect to.
+///
 /// Everything else passes through verbatim.
 fn friendly_keyring_error(e: &keyring::Error) -> String {
     let msg = e.to_string();
