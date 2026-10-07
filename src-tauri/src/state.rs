@@ -198,8 +198,7 @@ pub fn snapshot(st: &AppState) -> TimerState {
     if let Some(store) = st.store.as_ref() {
         t.workspace_name = store.workspace_name(wid);
         if wid != 0 {
-            t.entries =
-                store.entries_since(wid, start_of_window(window_days(st.store.as_ref())));
+            t.entries = store.entries_since(wid, start_of_window(window_days(st.store.as_ref())));
             // The running row is global (one running timer per user, in any
             // organisation). Include it even when it belongs to another
             // organisation, so the timer bar and the row stay correct after

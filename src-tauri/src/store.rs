@@ -157,10 +157,7 @@ impl Store {
             "ALTER TABLE picker_projects ADD COLUMN workspace_id INTEGER",
             [],
         );
-        let _ = conn.execute(
-            "ALTER TABLE clients ADD COLUMN workspace_id INTEGER",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE clients ADD COLUMN workspace_id INTEGER", []);
         let _ = conn.execute("DROP TABLE IF EXISTS picker_tags", []);
         Some(Store {
             conn: Mutex::new(conn),

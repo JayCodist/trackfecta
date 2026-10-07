@@ -930,8 +930,7 @@ pub fn run() {
                     // it stops. When idle it shows the day total, so clicking
                     // it opens the window.
                     "status" => {
-                        let running =
-                            app.state::<AppState>().timer.lock().unwrap().running;
+                        let running = app.state::<AppState>().timer.lock().unwrap().running;
                         if running {
                             let _ = do_stop(app);
                         } else if let Some(w) = app.get_webview_window("main") {
