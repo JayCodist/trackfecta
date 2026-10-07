@@ -77,8 +77,6 @@ parts:
       - pkg-config
       - build-essential
       - libssl-dev
-    build-snaps:
-      - node@24/stable
     stage-packages:
       - libwebkit2gtk-4.1-0
       - libayatana-appindicator3-1
@@ -88,10 +86,33 @@ parts:
       - RUSTUP_HOME: "$CRAFT_PART_BUILD/.rustup"
     override-build: |
       craftctl default
+      # This part has no `source:`, so pin the working directory to the
+      # project tree; every relative path below (src-tauri/, metadata/, ...)
+      # resolves against it in local and Launchpad builds alike.
+      cd "${CRAFT_PROJECT_DIR:-$SNAPCRAFT_PROJECT_DIR}"
       # Rust stable (minimal profile) into the part build dir.
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --profile minimal --default-toolchain stable
       . "$CRAFT_PART_BUILD/.cargo/env"
+      # Node.js LTS, pinned to the local dev version (v22.23.3; Vite needs
+      # >=22.12). Downloaded from nodejs.org (proxy-transparent, like rustup)
+      # and SHA256-verified against the published SHASUMS256.txt, because
+      # build-snaps cannot be installed on Launchpad remote builders.
+      NODE_VERSION=v22.23.3
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) NODE_ARCH=x64 ;;
+        arm64) NODE_ARCH=arm64 ;;
+        *) echo "ERROR: unsupported build arch: $CRAFT_ARCH_BUILD_FOR" >&2; exit 1 ;;
+      esac
+      NODE_DIST="node-$NODE_VERSION-linux-$NODE_ARCH"
+      ( cd "$CRAFT_PART_BUILD"
+        curl -fsSLO "https://nodejs.org/dist/$NODE_VERSION/$NODE_DIST.tar.xz"
+        curl -fsSLO "https://nodejs.org/dist/$NODE_VERSION/SHASUMS256.txt"
+        grep " $NODE_DIST.tar.xz$" SHASUMS256.txt | sha256sum -c -
+        tar -xf "$NODE_DIST.tar.xz" )
+      export PATH="$CRAFT_PART_BUILD/$NODE_DIST/bin:$PATH"
+      node --version
+      npm --version
       # Build the frontend, then the Tauri .deb bundle. No updater artifacts:
       # the Snap Store delivers updates.
       npm ci
