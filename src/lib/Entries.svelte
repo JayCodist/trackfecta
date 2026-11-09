@@ -434,6 +434,21 @@
                     <Icons name="dollar" />
                   </span>
                 {/if}
+                {#if !c.running && !timer.running}
+                  <div class="row-actions">
+                    <button
+                      class="icon-round"
+                      title="Continue time entry"
+                      aria-label="Continue time entry"
+                      onclick={(ev) => {
+                        ev.stopPropagation();
+                        duplicateAndStart(head);
+                      }}
+                    >
+                      <Icons name="play" />
+                    </button>
+                  </div>
+                {/if}
                 {#if c.running}
                   <span class="row-dur running">{fmtDuration(c.secs)}</span>
                   <button
