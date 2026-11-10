@@ -48,8 +48,8 @@ modules:
     sources:
       - type: git
         url: https://github.com/JayCodist/trackfecta.git
-        tag: v1.0.3
-        commit: 57de4bda45d45d9b24e65675499aa2415453bd4a
+        tag: v1.0.4
+        commit: 4d6016b470c7998f9340378c7f48fc00df812289
       - cargo-sources.json
       - npm-sources.json
     build-commands:
