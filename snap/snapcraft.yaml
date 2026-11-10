@@ -27,7 +27,7 @@ title: Trackfecta
 # The store listing icon is taken from this path (relative to the project
 # root) at upload time. Without it the store shows a generic placeholder.
 icon: src-tauri/icons/icon.png
-version: "1.0.3"
+version: "1.0.4"
 license: MIT
 summary: Beautiful but unofficial Toggl Track desktop client for Linux
 # These four sync to the "More links" section of the store listing.

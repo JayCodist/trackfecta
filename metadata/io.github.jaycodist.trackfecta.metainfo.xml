@@ -69,6 +69,15 @@
   <launchable type="desktop-id">io.github.jaycodist.trackfecta.desktop</launchable>
 
   <releases>
+    <release version="1.0.4" date="2026-11-10">
+      <description>
+        <p>Continue from a merged group row.</p>
+        <ul>
+          <li>The merged group row in the entry list has a Continue button
+            that starts a new entry from that group</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.3" date="2026-10-26">
       <description>
         <p>Organisation switching, entry grouping, and refresh fixes.</p>
